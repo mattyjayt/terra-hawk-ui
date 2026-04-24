@@ -31,28 +31,14 @@ const pillars = [
 const About = () => {
   return (
     <main className="relative min-h-screen overflow-hidden text-foreground">
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 opacity-60"
-        style={{
-          background:
-            "radial-gradient(circle at 18% 32%, hsl(38 80% 50% / 0.08), transparent 35%), radial-gradient(circle at 82% 68%, hsl(88 60% 45% / 0.06), transparent 40%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10"
-        style={{ background: "var(--gradient-vignette)" }}
-      />
-
       <SiteNav />
 
       {/* Intro */}
       <section className="relative mx-auto max-w-[1440px] px-6 pt-6 md:px-10">
-        <div className="glass relative overflow-hidden rounded-[2rem] px-8 py-14 md:px-16 md:py-20 animate-fade-up">
+        <div className="glass glass-hover relative overflow-hidden rounded-[2rem] px-8 py-14 md:px-16 md:py-20 animate-fade-up">
           <div
             aria-hidden
-            className="absolute inset-0 opacity-50"
+            className="absolute inset-0 opacity-50 animate-drift"
             style={{
               background:
                 "radial-gradient(ellipse 60% 80% at 80% 50%, hsl(88 50% 40% / 0.15), transparent 60%)",
@@ -66,10 +52,11 @@ const About = () => {
               Four quiet senses,{" "}
               <span className="italic text-accent/90">one</span> living decision.
             </h2>
-            <p className="mt-5 max-w-xl text-[13px] leading-relaxed text-foreground/60">
-              Verdant is a closed-loop precision-farming platform. Each sealed
-              dome is a small, transparent world — and our job is to keep it
-              honest. We sense, we hydrate, we illuminate, and the plant grows.
+            <p className="mt-5 max-w-xl text-[13px] leading-relaxed text-foreground/65">
+              Terra Hawk is a closed-loop precision-farming platform. Each
+              sealed dome is a small, transparent world — and our job is to
+              keep it honest. We sense, we hydrate, we illuminate, and the
+              plant grows.
             </p>
           </div>
         </div>
@@ -81,7 +68,7 @@ const About = () => {
           {pillars.map(({ icon: Icon, tag, t, d }, i) => (
             <article
               key={tag}
-              className="glass group relative overflow-hidden rounded-[1.5rem] p-6 transition duration-700 hover:bg-white/[0.06] md:p-10 animate-fade-up"
+              className="glass glass-hover group relative overflow-hidden rounded-[1.5rem] p-6 md:p-10 animate-fade-up"
               style={{ animationDelay: `${i * 120}ms` }}
             >
               <div className="grid grid-cols-1 gap-6 md:grid-cols-[80px_1fr_2fr] md:items-start md:gap-10">
@@ -116,7 +103,7 @@ const About = () => {
 
       {/* Support / Contact */}
       <section className="relative mx-auto mt-20 max-w-[1440px] px-6 pb-20 md:px-10">
-        <div className="glass relative overflow-hidden rounded-[2rem] px-8 py-12 md:px-16 md:py-16 animate-fade-up">
+        <div className="glass glass-hover relative overflow-hidden rounded-[2rem] px-8 py-12 md:px-16 md:py-16 animate-fade-up">
           <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-center">
             <div className="max-w-md">
               <div className="glass-pill inline-block text-foreground/80">
@@ -125,17 +112,17 @@ const About = () => {
               <h3 className="mt-5 font-display text-[28px] font-light tracking-tight text-foreground/95 md:text-[36px]">
                 Talk to a grower.
               </h3>
-              <p className="mt-3 text-[12px] leading-relaxed text-foreground/55">
+              <p className="mt-3 text-[12px] leading-relaxed text-foreground/60">
                 Every chamber ships with a human on the other end. Reach us
                 anytime — we answer in the language of the plant.
               </p>
             </div>
             <div className="flex flex-col items-start gap-3 md:items-end">
               <a
-                href="mailto:hello@verdant.farm"
-                className="group inline-flex items-center gap-2 rounded-full glass-strong px-6 py-3 text-[12px] font-medium text-foreground/95 transition hover:bg-white/15"
+                href="mailto:hello@terrahawk.farm"
+                className="group inline-flex items-center gap-2 rounded-full glass-strong glass-hover px-6 py-3 text-[12px] font-medium text-foreground/95"
               >
-                hello@verdant.farm
+                hello@terrahawk.farm
                 <ArrowUpRight
                   className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
                   strokeWidth={2}
@@ -151,10 +138,10 @@ const About = () => {
         <div className="hairline mt-12 mb-6" />
         <div className="flex flex-col items-start justify-between gap-4 text-[10px] uppercase tracking-[0.3em] text-foreground/40 md:flex-row md:items-center">
           <span className="font-display normal-case tracking-[0.45em] text-foreground/70">
-            VERDANT
+            TERRA HAWK
           </span>
           <span>© 2026 · grown in the dark</span>
-          <span>vrd · 2026</span>
+          <span>thk · 2026</span>
         </div>
       </section>
     </main>

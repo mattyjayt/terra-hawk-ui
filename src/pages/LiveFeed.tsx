@@ -50,20 +50,6 @@ const LiveFeed = () => {
 
   return (
     <main className="relative min-h-screen overflow-hidden text-foreground">
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 opacity-60"
-        style={{
-          background:
-            "radial-gradient(circle at 18% 32%, hsl(38 80% 50% / 0.08), transparent 35%), radial-gradient(circle at 82% 68%, hsl(88 60% 45% / 0.06), transparent 40%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10"
-        style={{ background: "var(--gradient-vignette)" }}
-      />
-
       <SiteNav />
 
       <section className="relative mx-auto max-w-[1440px] px-6 pb-20 md:px-10">
@@ -83,19 +69,19 @@ const LiveFeed = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-          {/* CV stream viewport */}
-          <div className="relative h-[60vh] min-h-[480px] overflow-hidden rounded-[2rem] border border-white/5">
+          {/* CV stream viewport — now glassy, image bleeds through page background */}
+          <div className="glass relative h-[60vh] min-h-[480px] overflow-hidden rounded-[2rem]">
             <img
               src={heroTerrarium}
               alt="Live computer vision feed of the dome"
-              className="absolute inset-0 h-full w-full object-cover animate-slow-zoom"
+              className="absolute inset-0 h-full w-full object-cover opacity-70 animate-slow-zoom"
             />
             <div
               aria-hidden
               className="absolute inset-0"
               style={{
                 background:
-                  "linear-gradient(180deg, hsl(160 25% 4% / 0.35) 0%, transparent 40%, hsl(160 25% 4% / 0.5) 100%)",
+                  "linear-gradient(180deg, hsl(160 25% 4% / 0.25) 0%, transparent 40%, hsl(160 25% 4% / 0.4) 100%)",
               }}
             />
 
