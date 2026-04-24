@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import LiveFeed from "./pages/LiveFeed.tsx";
 import About from "./pages/About.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import AmbientBackground from "./components/AmbientBackground.tsx";
 
 const queryClient = new QueryClient();
 
@@ -16,6 +17,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <AmbientBackground />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/live" element={<LiveFeed />} />

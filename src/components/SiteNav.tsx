@@ -19,7 +19,7 @@ const SiteNav = () => {
         to="/"
         className="font-display text-[15px] font-normal tracking-[0.45em] text-foreground/95 transition hover:text-foreground"
       >
-        VERDANT
+        TERRA HAWK
       </Link>
       <nav className="hidden items-center gap-1 md:flex">
         <div className="glass flex items-center gap-1 rounded-full p-1">
