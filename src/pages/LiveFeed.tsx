@@ -71,11 +71,9 @@ const LiveFeed = () => {
     <main className="relative min-h-screen overflow-hidden text-foreground">
       {/* Full-bleed feed — overrides the global ambient bg on this page */}
       <div aria-hidden className="fixed inset-0 -z-[5] overflow-hidden">
-        <img
-          src={heroTerrarium}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover animate-slow-zoom"
-          style={{ filter: "saturate(118%) contrast(1.06) brightness(0.95)" }}
+        <LiveStream
+          className="absolute inset-0 h-full w-full"
+          onStatusChange={setStreamStatus}
         />
         {/* Vignette only — keep the feed immersive */}
         <div
@@ -118,11 +116,25 @@ const LiveFeed = () => {
         </Link>
 
         <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/90 hud-text">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-70" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
-          </span>
-          rec · cam 01
+          {streamStatus === "live" ? (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
+              </span>
+              live · cam 01
+            </>
+          ) : streamStatus === "connecting" ? (
+            <>
+              <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
+              connecting · cam 01
+            </>
+          ) : (
+            <>
+              <span className="h-2 w-2 rounded-full bg-accent animate-pulse-glow" />
+              simulated · cam 01
+            </>
+          )}
         </div>
 
         <div className="font-mono text-[10px] uppercase tabular-nums tracking-[0.3em] text-foreground/90 hud-text">
