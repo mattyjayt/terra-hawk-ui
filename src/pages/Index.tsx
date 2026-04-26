@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import SiteNav from "@/components/SiteNav";
+import CinematicText from "@/components/CinematicText";
 
 const Index = () => {
   return (
@@ -66,11 +67,16 @@ const Index = () => {
                   className="animate-shimmer"
                 />
               </svg>
-              <p className="font-mono text-[10px] uppercase leading-[1.9] tracking-[0.2em] text-foreground/75 hud-text animate-fade-up delay-500">
-                transparent conditions ·
-                <br /> no hidden variables ·
-                <br /> full protection
-              </p>
+              <CinematicText
+                thoughts={[
+                  [
+                    "transparent conditions",
+                    "no hidden variables",
+                    "full protection"
+                  ]
+                ]}
+                className="font-mono text-[10px] uppercase leading-[1.9] tracking-[0.2em] text-foreground/75 hud-text animate-fade-up delay-500"
+              />
             </div>
           </div>
 
