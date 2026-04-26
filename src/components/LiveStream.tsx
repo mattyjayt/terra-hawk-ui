@@ -2,14 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import simTerrariumAsset from "@/assets/sim-terrarium.mp4.asset.json";
 
 /**
- * WebRTC live stream via the WHEP protocol (the de-facto standard for
- * pulling a stream from MediaMTX, go2rtc, Janus, AntMedia, etc).
+ * WebRTC live stream via the WHEP protocol (MediaMTX, go2rtc, etc).
  *
  * Env var (set in your .env):
- *   VITE_LIVESTREAM_URL=https://<ip-address>/whep   (or full WHEP endpoint)
+ *   VITE_LIVESTREAM_URL=http(s)://<ip>:8889/<path>/whep
  *
- * If the var is missing OR the endpoint is unreachable, we fall back to a
- * looping simulated terrarium feed so the HUD always has something to show.
+ * Falls back to a looping simulated terrarium feed if unreachable.
  */
 
 type Status = "idle" | "connecting" | "live" | "simulated";
@@ -20,67 +18,88 @@ interface Props {
 }
 
 const STREAM_URL = import.meta.env.VITE_LIVESTREAM_URL as string | undefined;
-const CONNECT_TIMEOUT_MS = 4000;
+const CONNECT_TIMEOUT_MS = 6000;
 
 const LiveStream = ({ className, onStatusChange }: Props) => {
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const simVideoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState<Status>("idle");
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
     onStatusChange?.(status);
   }, [status, onStatusChange]);
 
+  // Attach stream to <video> whenever either changes. The live <video> is
+  // always mounted, so the ref is available as soon as the stream arrives.
+  useEffect(() => {
+    const v = liveVideoRef.current;
+    if (v && mediaStream && v.srcObject !== mediaStream) {
+      v.srcObject = mediaStream;
+      v.play().catch((e) => console.warn("[LiveStream] play() rejected:", e));
+    }
+  }, [mediaStream]);
+
   useEffect(() => {
     let cancelled = false;
 
-    const fallback = () => {
+    const fallback = (reason: string) => {
       if (cancelled) return;
+      console.warn("[LiveStream] falling back to simulated:", reason);
       setStatus("simulated");
       simVideoRef.current?.play().catch(() => {});
     };
 
     const connect = async () => {
       if (!STREAM_URL) {
-        fallback();
+        fallback("VITE_LIVESTREAM_URL not set");
         return;
       }
 
+      console.info("[LiveStream] connecting to", STREAM_URL);
       setStatus("connecting");
+
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
       pcRef.current = pc;
 
-      // We only want to receive media
       pc.addTransceiver("video", { direction: "recvonly" });
       pc.addTransceiver("audio", { direction: "recvonly" });
 
       pc.ontrack = (event) => {
-        if (liveVideoRef.current && event.streams[0]) {
-          liveVideoRef.current.srcObject = event.streams[0];
-        }
+        console.info(
+          "[LiveStream] ontrack",
+          event.track.kind,
+          "streams:",
+          event.streams.length,
+        );
+        const stream = event.streams[0] ?? new MediaStream([event.track]);
+        if (!cancelled) setMediaStream(stream);
       };
 
       pc.onconnectionstatechange = () => {
         if (cancelled) return;
-        const s = pc.connectionState;
-        if (s === "connected") setStatus("live");
-        if (s === "failed" || s === "disconnected" || s === "closed") {
-          fallback();
+        console.info("[LiveStream] connectionState:", pc.connectionState);
+        if (pc.connectionState === "connected") setStatus("live");
+        if (
+          pc.connectionState === "failed" ||
+          pc.connectionState === "disconnected" ||
+          pc.connectionState === "closed"
+        ) {
+          fallback(`pc state ${pc.connectionState}`);
         }
       };
 
-      // Hard timeout — if we can't reach the camera, simulate.
+      pc.oniceconnectionstatechange = () => {
+        console.info("[LiveStream] iceConnectionState:", pc.iceConnectionState);
+      };
+
       const timeout = setTimeout(() => {
         if (pc.connectionState !== "connected") {
-          try {
-            pc.close();
-          } catch {
-            /* noop */
-          }
-          fallback();
+          try { pc.close(); } catch { /* noop */ }
+          fallback("connect timeout");
         }
       }, CONNECT_TIMEOUT_MS);
 
@@ -88,25 +107,21 @@ const LiveStream = ({ className, onStatusChange }: Props) => {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        // WHEP: POST the SDP offer, receive SDP answer
         const res = await fetch(STREAM_URL, {
           method: "POST",
           headers: { "Content-Type": "application/sdp" },
           body: offer.sdp ?? "",
         });
 
-        if (!res.ok) throw new Error(`WHEP ${res.status}`);
+        if (!res.ok) throw new Error(`WHEP HTTP ${res.status}`);
         const answerSdp = await res.text();
         await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+        console.info("[LiveStream] WHEP handshake OK");
         clearTimeout(timeout);
       } catch (err) {
         clearTimeout(timeout);
-        try {
-          pc.close();
-        } catch {
-          /* noop */
-        }
-        fallback();
+        try { pc.close(); } catch { /* noop */ }
+        fallback(`handshake error: ${(err as Error).message}`);
       }
     };
 
@@ -114,27 +129,30 @@ const LiveStream = ({ className, onStatusChange }: Props) => {
 
     return () => {
       cancelled = true;
-      try {
-        pcRef.current?.close();
-      } catch {
-        /* noop */
-      }
+      try { pcRef.current?.close(); } catch { /* noop */ }
       pcRef.current = null;
     };
   }, []);
 
+  const showLive = status === "live" || status === "connecting";
+
   return (
     <div className={className}>
-      {status === "live" ? (
-        <video
-          ref={liveVideoRef}
-          className="absolute inset-0 h-full w-full object-cover animate-slow-zoom"
-          autoPlay
-          playsInline
-          muted
-          style={{ filter: "saturate(118%) contrast(1.06) brightness(0.95)" }}
-        />
-      ) : (
+      {/* Always mounted so the ref exists when ontrack fires */}
+      <video
+        ref={liveVideoRef}
+        className="absolute inset-0 h-full w-full object-cover animate-slow-zoom"
+        autoPlay
+        playsInline
+        muted
+        style={{
+          filter: "saturate(118%) contrast(1.06) brightness(0.95)",
+          opacity: showLive && mediaStream ? 1 : 0,
+          transition: "opacity 600ms ease",
+        }}
+      />
+      {/* Simulated fallback sits underneath; visible when not live */}
+      {!(status === "live" && mediaStream) && (
         <video
           ref={simVideoRef}
           src={simTerrariumAsset.url}
