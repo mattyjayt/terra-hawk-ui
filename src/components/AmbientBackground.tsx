@@ -1,4 +1,6 @@
+import { useLocation } from "react-router-dom";
 import heroTerrarium from "@/assets/hero-terrarium.jpg";
+import heroDome from "@/assets/hero-dome.jpg";
 
 /**
  * Global ambient backdrop. Lives behind every page so all glass UI floats
@@ -6,11 +8,16 @@ import heroTerrarium from "@/assets/hero-terrarium.jpg";
  * zoom + colored bokeh + vignette to blend the hero into the page.
  */
 const AmbientBackground = () => {
+  const location = useLocation();
+  const isAbout = location.pathname === "/about";
+  const bgImage = isAbout ? heroDome : heroTerrarium;
+
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
       {/* Hero image — full bleed, sharp, the actual stage */}
       <img
-        src={heroTerrarium}
+        key={bgImage}
+        src={bgImage}
         alt=""
         className="absolute inset-0 h-full w-full object-cover animate-slow-zoom"
         style={{ filter: "saturate(115%) brightness(0.92) contrast(1.05)" }}
