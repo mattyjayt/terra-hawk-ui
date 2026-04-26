@@ -20,7 +20,7 @@
 | | | |
 | | **— Planned —** | |
 | [FR-010](#fr-010) | Sensor Threshold Alerting & Actuator Commands via MQTT | 🔲 Planned |
-| [FR-011](#fr-011) | Distributed System Registry & Multi-System Architecture | 🚧 In Progress |
+| [FR-011](#fr-011) | Distributed System Registry & Multi-System Architecture (Phase 1) | ✅ Shipped |
 | [FR-012](#fr-012) | Configurable CV Overlay Display Modes | ✅ Shipped |
 | [FR-013](#fr-013) | Settings Page — CV & Agentic AI Configuration | 🚧 In Progress |
 | | | |

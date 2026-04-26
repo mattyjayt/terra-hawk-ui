@@ -89,12 +89,18 @@ Connects to MediaMTX via the **WHEP** (WebRTC-HTTP Egress Protocol):
 
 **Fallback:** If the WHEP handshake fails or `VITE_LIVESTREAM_URL` is not set, the component seamlessly switches to a looping simulated terrarium video.
 
-### WebSocket — Sensor Data (`useSensorData.ts`)
+### WebSocket — Sensor & CV Data (`useSensorData.ts`)
+
+Supports **per-system connections** via optional `systemId` parameter:
 
 | Connection | URL | Rate | Data |
 |---|---|---|---|
-| Sensors | `ws://localhost:8000/ws/sensors` | 5 Hz (200ms) | `{ status, temperature, humidity, soil }` |
-| CV | `ws://localhost:8000/ws/cv` | 50 Hz (20ms) | `{ timestamp, resolution, objects[] }` |
+| Sensors (per-system) | `ws://{host}:8000/ws/sensors/{systemId}` | 5 Hz | `{ status, temperature, humidity, soil }` |
+| CV (per-system) | `ws://{host}:8000/ws/cv/{systemId}` | ~50 Hz | `{ timestamp, resolution, objects[] }` |
+| Sensors (legacy) | `ws://{host}:8000/ws/sensors` | 5 Hz | Default system |
+| CV (legacy) | `ws://{host}:8000/ws/cv` | ~50 Hz | Default system |
+
+The hostname is derived from `VITE_LIVESTREAM_URL` (e.g. `192.168.178.147`). The hook reconnects automatically when `systemId` changes, enabling live system switching.
 
 **Sensor state** is merged into a flat key-value map. The LiveFeed page dynamically renders metrics from whatever fields the backend provides, using a configurable label/unit mapping.
 
@@ -106,18 +112,18 @@ Connects to MediaMTX via the **WHEP** (WebRTC-HTTP Egress Protocol):
 
 Auto-reconnect on disconnect (3s delay for sensors).
 
-### REST — Settings API
-
-The Settings page communicates with the backend via REST endpoints:
+### REST — Systems & Settings API
 
 | Endpoint | Method | Description |
 |---|---|---|
+| `/systems` | GET | All registered systems with live status (online/offline) |
+| `/systems/{id}` | GET | Single system details (name, location, components, status) |
 | `/settings` | GET | Current config + defaults + live inference stats |
 | `/settings` | PUT | Partial config update (model, confidence, IOU, imgsz) |
 | `/settings/models` | GET | Available models with name, format, and size |
 | `/ping` | GET | Health check |
 
-Model hot-swap: selecting a new model via PUT triggers a live swap in the inference thread — no server restart required. Confidence, IOU, and resolution changes take effect on the next inference frame.
+Model hot-swap: selecting a new model via PUT triggers a live swap in the inference thread — no server restart required.
 
 ---
 
@@ -140,7 +146,8 @@ verdant-precision/
 │   │   ├── SiteNav.tsx                # Top navigation bar
 │   │   └── ui/                        # shadcn/ui component library (~40 components)
 │   ├── hooks/
-│   │   ├── useSensorData.ts           # Dual WebSocket hook (sensors + CV)
+│   │   ├── useSensorData.ts           # Per-system dual WebSocket hook (sensors + CV)
+│   │   ├── useSystems.ts             # System registry hook (fetches + polls GET /systems)
 │   │   ├── use-mobile.tsx             # Responsive breakpoint hook
 │   │   └── use-toast.ts              # Toast notification hook
 │   ├── lib/
