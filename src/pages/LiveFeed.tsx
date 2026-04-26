@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import SiteNav from "@/components/SiteNav";
 import LiveStream, { type StreamStatus } from "@/components/LiveStream";
+import { useSensorData } from "@/hooks/useSensorData";
 
 type Metric = { label: string; value: string; unit: string };
 
+const LIVE_METRIC_CONFIG: Record<string, { label: string; unit: string }> = {
+  temperature: { label: "TEMP", unit: "°C" },
+  humidity: { label: "HUM", unit: "%" },
+  soil: { label: "SOIL", unit: "%" },
+  pressure: { label: "PRES", unit: "hPa" },
+  light: { label: "LUM", unit: "lx" },
+  co2: { label: "CO2", unit: "ppm" },
+};
+
 const CornerBrackets = ({ mounted }: { mounted: boolean }) => {
-  const base = `pointer-events-none absolute z-[5] h-8 w-8 border-foreground/75 transition-opacity duration-1000 ${
-    mounted ? "opacity-90" : "opacity-0"
-  }`;
+  const base = `pointer-events-none absolute z-[5] h-8 w-8 border-foreground/75 transition-opacity duration-1000 ${mounted ? "opacity-90" : "opacity-0"
+    }`;
   return (
     <>
       <div className={`${base} left-6 top-6 border-l border-t`} />
@@ -24,11 +32,25 @@ const LiveFeed = () => {
   const [mounted, setMounted] = useState(false);
   const [time, setTime] = useState("");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
-  const [metrics, setMetrics] = useState<Metric[]>([
-    { label: "TEMP", value: "23.4", unit: "°C" },
-    { label: "HUM", value: "68", unit: "%" },
-    { label: "SOIL", value: "42", unit: "%" },
-  ]);
+  const { data: sensorData, cvData } = useSensorData();
+
+  const dynamicMetrics = Object.entries(sensorData)
+    .filter(([key]) => key !== "status")
+    .map(([key, value]) => {
+      const config = LIVE_METRIC_CONFIG[key] || {
+        label: key.toUpperCase().slice(0, 4),
+        unit: "",
+      };
+      return {
+        label: config.label,
+        value: value === null || value === undefined
+          ? "N/A"
+          : typeof value === "number"
+            ? value.toFixed(key === "temperature" ? 1 : 0)
+            : String(value),
+        unit: value === null || value === undefined ? "" : config.unit,
+      };
+    });
 
   useEffect(() => {
     setMounted(true);
@@ -36,34 +58,21 @@ const LiveFeed = () => {
 
   // UTC clock
   useEffect(() => {
+
     const tick = () => {
       const d = new Date();
-      const hh = d.getUTCHours().toString().padStart(2, "0");
-      const mm = d.getUTCMinutes().toString().padStart(2, "0");
-      const ss = d.getUTCSeconds().toString().padStart(2, "0");
-      setTime(`${hh}:${mm}:${ss} UTC`);
+
+      const tz = new Intl.DateTimeFormat("en", { timeZoneName: "short" })
+        .formatToParts(d)
+        .find(p => p.type === "timeZoneName")?.value ?? "";
+
+      const hh = d.getHours().toString().padStart(2, "0");
+      const mm = d.getMinutes().toString().padStart(2, "0");
+      const ss = d.getSeconds().toString().padStart(2, "0");
+      setTime(`${hh}:${mm}:${ss} ${tz}`);
     };
     tick();
     const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Live drift
-  useEffect(() => {
-    const id = setInterval(() => {
-      setMetrics((prev) =>
-        prev.map((m) => {
-          const base = parseFloat(m.value);
-          const delta = (Math.random() - 0.5) * (m.unit === "°C" ? 0.2 : 0.8);
-          const next = base + delta;
-          return {
-            ...m,
-            value:
-              m.unit === "°C" ? next.toFixed(1) : Math.round(next).toString(),
-          };
-        })
-      );
-    }, 2200);
     return () => clearInterval(id);
   }, []);
 
@@ -100,13 +109,44 @@ const LiveFeed = () => {
             boxShadow: "0 0 28px hsl(88 60% 55% / 0.35)",
           }}
         />
+
+        {/* Computer Vision Overlays */}
+        {cvData?.objects.map((obj, i) => {
+          // Bbox values are already normalized (0-1) from the backend
+          const left = obj.bbox.x * 100;
+          const top = obj.bbox.y * 100;
+          const width = obj.bbox.width * 100;
+          const height = obj.bbox.height * 100;
+          
+          return (
+            <div
+              key={obj.id ?? `obj-${i}`}
+              // className="absolute z-20 border border-accent/70 bg-accent/10"
+              className="absolute z-20"
+              style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
+            >
+              {/* Label at the center of the bounding box */}
+              <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.2em] text-accent hud-text">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse-glow" />
+                {obj.label} [{Math.round(obj.confidence * 100)}%]
+              </div>
+              
+              {/* Corner brackets for the bounding box */}
+              {/* 
+              <div className="absolute -left-px -top-px h-2 w-2 border-l-2 border-t-2 border-accent" />
+              <div className="absolute -right-px -top-px h-2 w-2 border-r-2 border-t-2 border-accent" />
+              <div className="absolute -bottom-px -left-px h-2 w-2 border-b-2 border-l-2 border-accent" />
+              <div className="absolute -bottom-px -right-px h-2 w-2 border-b-2 border-r-2 border-accent" />
+              */}
+            </div>
+          );
+        })}
       </div>
 
-      <SiteNav />
       <CornerBrackets mounted={mounted} />
 
       {/* Top HUD bar — back + REC + clock */}
-      <div className="pointer-events-none absolute inset-x-0 top-24 z-10 mx-auto flex max-w-[1440px] items-center justify-between px-10">
+      <div className="pointer-events-none absolute inset-x-0 top-10 z-10 mx-auto flex max-w-[1440px] items-center justify-between px-10">
         <Link
           to="/"
           className="pointer-events-auto inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/90 hud-text transition hover:text-accent"
@@ -145,9 +185,8 @@ const LiveFeed = () => {
       {/* Center crosshair */}
       <div
         aria-hidden
-        className={`pointer-events-none absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 transition-opacity duration-[1400ms] ${
-          mounted ? "opacity-100" : "opacity-0"
-        }`}
+        className={`pointer-events-none absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 transition-opacity duration-[1400ms] ${mounted ? "opacity-100" : "opacity-0"
+          }`}
       >
         <div className="relative h-32 w-32">
           <div className="absolute inset-0 rounded-full border border-accent/45 animate-ping-slow" />
@@ -162,17 +201,14 @@ const LiveFeed = () => {
 
       {/* Identity label — bottom left */}
       <div className="pointer-events-none absolute bottom-10 left-10 z-10 animate-fade-up">
-        <div className="font-display text-[42px] font-light leading-none tracking-tight text-foreground/95 hud-text-strong md:text-[56px]">
-          TERRA HAWK
-        </div>
         <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/80 hud-text">
-          chamber 04 · sector a
+          chamber 01 · sector a
         </div>
       </div>
 
       {/* Telemetry overlay — containerless, bottom right, AR-inspired */}
       <div className="pointer-events-none absolute bottom-10 right-10 z-10 flex items-end gap-10 animate-fade-up delay-200">
-        {metrics.map((m) => (
+        {dynamicMetrics.map((m) => (
           <div key={m.label} className="text-right">
             <div className="flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/80 hud-text">
               <span className="h-1 w-1 rounded-full bg-accent animate-pulse-glow" />
