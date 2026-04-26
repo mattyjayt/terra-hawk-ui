@@ -8,20 +8,20 @@ import heroTerrarium from "@/assets/hero-terrarium.jpg";
 const AmbientBackground = () => {
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      {/* Hero image, very soft and blurred so UI reads on top */}
+      {/* Hero image — full bleed, sharp, the actual stage */}
       <img
         src={heroTerrarium}
         alt=""
         className="absolute inset-0 h-full w-full object-cover animate-slow-zoom"
-        style={{ filter: "blur(2px) saturate(110%) brightness(0.78)" }}
+        style={{ filter: "saturate(115%) brightness(0.92) contrast(1.05)" }}
       />
 
-      {/* Deep wash to keep contrast for text */}
+      {/* Light edge wash only — keep the image readable as the hero */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, hsl(160 25% 4% / 0.55) 0%, hsl(160 22% 5% / 0.35) 40%, hsl(160 25% 4% / 0.75) 100%)",
+            "radial-gradient(ellipse 90% 70% at 50% 50%, transparent 45%, hsl(160 25% 3% / 0.55) 100%)",
         }}
       />
 
