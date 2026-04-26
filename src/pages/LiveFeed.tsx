@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import LiveStream, { type StreamStatus, type StreamStats } from "@/components/LiveStream";
 import { useSensorData } from "@/hooks/useSensorData";
+import { useSystems } from "@/hooks/useSystems";
 
 type Metric = { label: string; value: string; unit: string };
 
@@ -51,7 +52,10 @@ const LiveFeed = () => {
   const [time, setTime] = useState("");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [streamStats, setStreamStats] = useState<StreamStats | null>(null);
-  const { data: sensorData, cvData } = useSensorData();
+  const { systems } = useSystems();
+  const [activeSystemId, setActiveSystemId] = useState<string | undefined>(undefined);
+  const activeSystem = systems.find((s) => s.id === activeSystemId) ?? systems[0] ?? null;
+  const { data: sensorData, cvData } = useSensorData(activeSystem?.id);
   const [overlayConfig, setOverlayConfig] = useState<OverlayConfig>(getInitialOverlayConfig());
   const [isOverlayPanelOpen, setIsOverlayPanelOpen] = useState(false);
   const [trackedObjectId, setTrackedObjectId] = useState<string | null>(null);
@@ -310,7 +314,7 @@ const LiveFeed = () => {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-70" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
               </span>
-              live · cam 01
+              live · {activeSystem?.name ?? "cam 01"}
               {streamStats && (
                 <span className="ml-2 text-foreground/70">
                   [{Math.round(streamStats.fps)}FPS · {Math.round(streamStats.latency)}MS]
@@ -320,12 +324,12 @@ const LiveFeed = () => {
           ) : streamStatus === "connecting" ? (
             <>
               <span className="h-2 w-2 rounded-full bg-foreground/80 animate-pulse" />
-              connecting · cam 01
+              connecting · {activeSystem?.name ?? "cam 01"}
             </>
           ) : (
             <>
               <span className="h-2 w-2 rounded-full bg-accent animate-pulse-glow" />
-              simulated · cam 01
+              simulated · {activeSystem?.name ?? "cam 01"}
             </>
           )}
         </div>
@@ -364,7 +368,7 @@ const LiveFeed = () => {
       {/* Identity label — bottom left */}
       <div className="pointer-events-none absolute bottom-10 left-10 z-10 animate-fade-up">
         <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/95 hud-text">
-          chamber 01 · sector a
+          {activeSystem ? `${activeSystem.name} · ${activeSystem.location}` : "chamber 01 · sector a"}
         </div>
       </div>
 

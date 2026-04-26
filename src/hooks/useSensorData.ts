@@ -13,9 +13,24 @@ export interface CVData {
   objects: CVObject[];
 }
 
-export function useSensorData() {
+function getApiHostname(): string {
+  const streamUrl = import.meta.env.VITE_LIVESTREAM_URL as string | undefined;
+  if (streamUrl) {
+    try {
+      return new URL(streamUrl).hostname;
+      // return "localhost"
+    } catch { /* fall through */ }
+  }
+  return "localhost";
+}
+
+/**
+ * Connects to sensor and CV WebSocket streams.
+ * @param systemId — optional system ID for multi-system support.
+ *   If omitted, connects to legacy `/ws/sensors` and `/ws/cv` (default system).
+ */
+export function useSensorData(systemId?: string) {
   const [data, setData] = useState<Record<string, unknown>>({
-    // Initial state matching the backend structure
     temperature: null,
     humidity: null,
     soil: null,
@@ -25,19 +40,12 @@ export function useSensorData() {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    // Derive WS URL from VITE_LIVESTREAM_URL
-    const streamUrl = import.meta.env.VITE_LIVESTREAM_URL || "http://localhost";
-    let hostname = "localhost";
-    try {
-      const url = new URL(streamUrl);
-      hostname = url.hostname;
-    } catch (e) {
-      console.error("Invalid VITE_LIVESTREAM_URL", e);
-    }
+    const hostname = getApiHostname();
+    const sensorPath = systemId ? `/ws/sensors/${systemId}` : "/ws/sensors";
+    const cvPath = systemId ? `/ws/cv/${systemId}` : "/ws/cv";
+    const wsUrl = `ws://${hostname}:8000${sensorPath}`;
+    const wsCVUrl = `ws://${hostname}:8000${cvPath}`;
 
-    // const wsUrl = `ws://${hostname}:8000/ws/sensors`;
-    const wsUrl = `ws://localhost:8000/ws/sensors`;
-    const wsCVUrl = `ws://localhost:8000/ws/cv`;
     let ws: WebSocket;
     let wsCV: WebSocket;
     let reconnectTimer: NodeJS.Timeout;
@@ -61,7 +69,6 @@ export function useSensorData() {
       ws.onclose = () => {
         setConnected(false);
         setData((prev) => ({ ...prev, status: "disconnected" }));
-        // Reconnect after 3 seconds
         reconnectTimer = setTimeout(connect, 3000);
       };
 
@@ -71,12 +78,11 @@ export function useSensorData() {
       };
     };
 
-    const testComputerVision = () => {
+    const connectCV = () => {
       wsCV = new WebSocket(wsCVUrl);
-      console.log("Computer vision WebSocket is open");
 
       wsCV.onopen = () => {
-        console.log("Connected to computer vision WebSocket");
+        console.log(`Connected to CV WebSocket (${cvPath})`);
       };
 
       wsCV.onmessage = (event) => {
@@ -84,36 +90,35 @@ export function useSensorData() {
           const parsed = JSON.parse(event.data);
           setCvData(parsed);
         } catch (e) {
-          console.error("Failed to parse computer vision data", e);
+          console.error("Failed to parse CV data", e);
         }
       };
 
       wsCV.onclose = () => {
-        console.log("Disconnected from computer vision WebSocket");
+        console.log("Disconnected from CV WebSocket");
       };
 
       wsCV.onerror = (err) => {
-        console.error("Computer vision WebSocket error:", err);
+        console.error("CV WebSocket error:", err);
         wsCV.close();
       };
     };
 
     connect();
-    testComputerVision();
+    connectCV();
 
     return () => {
       clearTimeout(reconnectTimer);
       if (ws) {
-        ws.onclose = null; // prevent reconnect loop on unmount
+        ws.onclose = null;
         ws.close();
       }
-
       if (wsCV) {
         wsCV.onclose = null;
         wsCV.close();
       }
     };
-  }, []);
+  }, [systemId]);
 
   return { data, connected, cvData };
 }
