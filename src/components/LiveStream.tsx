@@ -12,15 +12,21 @@ import simTerrariumAsset from "@/assets/sim-terrarium.mp4.asset.json";
 
 type Status = "idle" | "connecting" | "live" | "simulated";
 
+export interface StreamStats {
+  fps: number;
+  latency: number;
+}
+
 interface Props {
   className?: string;
   onStatusChange?: (s: Status) => void;
+  onStats?: (stats: StreamStats) => void;
 }
 
 const STREAM_URL = import.meta.env.VITE_LIVESTREAM_URL as string | undefined;
 const CONNECT_TIMEOUT_MS = 6000;
 
-const LiveStream = ({ className, onStatusChange }: Props) => {
+const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const simVideoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -30,6 +36,36 @@ const LiveStream = ({ className, onStatusChange }: Props) => {
   useEffect(() => {
     onStatusChange?.(status);
   }, [status, onStatusChange]);
+
+  useEffect(() => {
+    if (status !== "live" || !pcRef.current) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const pc = pcRef.current;
+        if (!pc) return;
+        const stats = await pc.getStats();
+
+        let fps = 0;
+        let latency = 0;
+
+        stats.forEach((report) => {
+          if (report.type === "inbound-rtp" && report.kind === "video") {
+            if (report.framesPerSecond) fps = report.framesPerSecond;
+          }
+          if (report.type === "candidate-pair" && report.state === "succeeded") {
+            if (report.currentRoundTripTime) latency = report.currentRoundTripTime * 1000;
+          }
+        });
+
+        onStats?.({ fps, latency });
+      } catch (e) {
+        console.warn("[LiveStream] getStats error:", e);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [status, onStats]);
 
   // Attach stream to <video> whenever either changes. The live <video> is
   // always mounted, so the ref is available as soon as the stream arrives.

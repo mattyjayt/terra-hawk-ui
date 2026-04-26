@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import LiveStream, { type StreamStatus } from "@/components/LiveStream";
+import LiveStream, { type StreamStatus, type StreamStats } from "@/components/LiveStream";
 import { useSensorData } from "@/hooks/useSensorData";
 
 type Metric = { label: string; value: string; unit: string };
@@ -32,6 +32,7 @@ const LiveFeed = () => {
   const [mounted, setMounted] = useState(false);
   const [time, setTime] = useState("");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
+  const [streamStats, setStreamStats] = useState<StreamStats | null>(null);
   const { data: sensorData, cvData } = useSensorData();
 
   const dynamicMetrics = Object.entries(sensorData)
@@ -83,6 +84,7 @@ const LiveFeed = () => {
         <LiveStream
           className="absolute inset-0 h-full w-full"
           onStatusChange={setStreamStatus}
+          onStats={setStreamStats}
         />
         {/* Vignette only — keep the feed immersive */}
         <div
@@ -163,6 +165,11 @@ const LiveFeed = () => {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
               </span>
               live · cam 01
+              {streamStats && (
+                <span className="ml-2 text-foreground/50">
+                  [{Math.round(streamStats.fps)}FPS · {Math.round(streamStats.latency)}MS]
+                </span>
+              )}
             </>
           ) : streamStatus === "connecting" ? (
             <>
