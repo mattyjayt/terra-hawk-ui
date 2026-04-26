@@ -22,6 +22,7 @@
 | [FR-010](#fr-010) | Sensor Threshold Alerting & Actuator Commands via MQTT | 🔲 Planned |
 | [FR-011](#fr-011) | Multi-Camera Support & Camera Switching | 🔲 Planned |
 | [FR-012](#fr-012) | Configurable CV Overlay Display Modes | ✅ Shipped |
+| [FR-013](#fr-013) | Settings Page — CV & Agentic AI Configuration | 🚧 In Progress |
 
 ---
 
@@ -202,6 +203,21 @@
 | **Acceptance Criteria** | ① Each element (boxes, labels, confidence) can be toggled independently ② All 8 combinations work correctly (3 toggles = 8 states including all-off) ③ Toggle state persists across page reloads via `localStorage` ④ Toggling is instant — no WebSocket reconnect or data refetch ⑤ Toggle panel is visually consistent with the HUD design language ⑥ Toggle panel can be collapsed to minimise visual noise ⑦ Clean feed (all off) shows no residual overlay artifacts |
 | **Edge Cases** | `localStorage` unavailable (private browsing) → defaults to all-on, no error. No detections → toggle panel still visible and functional, just nothing to show. High object count with all elements on → same DOM concern as FR-005 (acceptable for <20 objects). Page loads with stale `localStorage` config (e.g. after adding a new toggle option in future) → merge with defaults, don't break |
 | **Dependencies** | FR-005 (existing CV overlay rendering as baseline to extend) |
+
+---
+
+## FR-013
+
+### Settings Page — CV & Agentic AI Configuration
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Provide a settings page with two categories (Computer Vision and Agentic AI) that allows users to view system status and dynamically configure runtime parameters — including hot-swapping the active detection model |
+| **Use Case** | User navigates to `/settings`, sees the current model (yolo26n) running at 12 FPS with 83ms latency. They select `yolo26n_ncnn_model` from a dropdown populated by the backend, adjust confidence to 0.6, and hit Apply. The inference pipeline hot-swaps the model without restarting the server. On the Agentic AI tab, placeholder settings are visible but disabled with a "coming soon" indicator |
+| **Technical Design** | **Backend — New endpoints in `main.py`:** ① `GET /settings` — returns full current config (model, confidence, IOU, imgsz, stream resolution, stream FPS) plus system status (inference FPS, latency, active tracker count). ② `GET /settings/models` — scans the working directory for `*.pt` files and `*_ncnn_model/` directories, returns list with name, format, and file size. ③ `PUT /settings` — accepts partial config update, validates values, applies changes at runtime. For model swap: acquires inference lock, replaces the `model` object in `video.py`, resets the tracker. For confidence/IOU/imgsz: updates the variables read by the inference loop (immediate effect, no restart). For stream resolution/FPS: writes new `mediamtx.yml` paths section and flags "restart required". **Backend — Shared config module (`config.py`):** Centralises all runtime settings currently scattered across `.env` reads in `video.py`. Provides `get_config()` and `update_config()` with thread-safe access. The inference thread reads from this config each iteration instead of module-level constants. **Frontend — New route `/settings` + page `Settings.tsx`:** Two-tab layout (Computer Vision / Agentic AI). CV tab contains: read-only status card (model name, FPS, latency), model dropdown (populated from `/settings/models`), confidence slider, IOU slider, inference resolution dropdown, stream resolution dropdown, stream FPS dropdown, overlay toggles (syncs with FR-012 localStorage). Apply button POSTs to `PUT /settings`. Reset button restores `.env` defaults. Agentic AI tab: placeholder cards for agent provider, model, mode, thresholds, memory — all disabled with "coming soon" badges. **Styling:** Follows HUD design language — dark glass cards, mono labels, accent sliders, consistent with existing pages. Nav updated to include settings link |
+| **Acceptance Criteria** | ① `GET /settings/models` returns all locally available models with name, format (pytorch/ncnn), and size ② Model hot-swap completes within 5s, inference resumes automatically on new model ③ Confidence/IOU/imgsz changes take effect on the next inference frame (no restart) ④ Stream config changes flag "restart required" in the UI ⑤ Settings page loads current values from the backend, not hardcoded defaults ⑥ Apply sends only changed values (partial update) ⑦ Reset restores original `.env` defaults ⑧ Agentic AI tab is visible but all controls are disabled with "coming soon" ⑨ Settings page is accessible from the main navigation ⑩ Invalid values (e.g. confidence > 1.0) are rejected by the backend with a 422 response |
+| **Edge Cases** | Model file deleted while selected → backend returns 404 on swap attempt, current model continues running. Model swap during active detections → inference lock prevents partial state. Large model loading time → frontend shows loading spinner, timeout at 30s. Backend offline → settings page shows connection error, retry button. Concurrent settings updates → last write wins (acceptable for single-user system). `.env` file missing → config module uses hardcoded defaults |
+| **Dependencies** | FR-003 (inference pipeline to reconfigure), FR-009 (NCNN models as swap targets), FR-012 (overlay toggles surfaced in settings) |
 
 ---
 

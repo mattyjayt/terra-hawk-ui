@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import LiveFeed from "./pages/LiveFeed.tsx";
 import About from "./pages/About.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import Settings from "./pages/Settings.tsx";
 import AmbientBackground from "./components/AmbientBackground.tsx";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/live" element={<LiveFeed />} />
           <Route path="/about" element={<About />} />
+          <Route path="/settings" element={<Settings />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

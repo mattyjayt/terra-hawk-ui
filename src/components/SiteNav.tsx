@@ -5,6 +5,7 @@ const links = [
   { to: "/", label: "dome" },
   { to: "/live", label: "live feed" },
   { to: "/about", label: "system" },
+  { to: "/settings", label: "settings" },
 ];
 
 const SiteNav = () => {
