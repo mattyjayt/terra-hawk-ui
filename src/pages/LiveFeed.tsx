@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import SiteNav from "@/components/SiteNav";
-import heroTerrarium from "@/assets/hero-terrarium.jpg";
+import LiveStream, { type StreamStatus } from "@/components/LiveStream";
 
 type Metric = { label: string; value: string; unit: string };
 
@@ -23,6 +23,7 @@ const CornerBrackets = ({ mounted }: { mounted: boolean }) => {
 const LiveFeed = () => {
   const [mounted, setMounted] = useState(false);
   const [time, setTime] = useState("");
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [metrics, setMetrics] = useState<Metric[]>([
     { label: "TEMP", value: "23.4", unit: "°C" },
     { label: "HUM", value: "68", unit: "%" },
