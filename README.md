@@ -60,6 +60,17 @@ The core experience. Full-screen immersive view featuring:
 
 Four-pillar overview of the TerraHawk philosophy: Sense → Hydrate → Illuminate → Grow. Contact section with support CTA.
 
+### `/settings` — Configuration
+
+Two-tab settings interface:
+
+- **Computer Vision** — live system status (model, FPS, latency, active tracks), model hot-swap dropdown (populated dynamically from backend), confidence/IOU sliders, inference resolution selector. Apply sends partial updates; Reset restores defaults.
+- **Agentic AI** — placeholder tab for upcoming agent configuration (provider, model, mode, alert thresholds). All controls disabled with "coming soon" indicators.
+
+### `/agent` — Agent Chat *(planned)*
+
+Conversational interface with the farm's AI agent. Ask questions about farm state, get recommendations, review reasoning. See [Agentic AI Roadmap](#agentic-ai-roadmap) below.
+
 ---
 
 ## Real-Time Data Connections
@@ -95,6 +106,19 @@ Connects to MediaMTX via the **WHEP** (WebRTC-HTTP Egress Protocol):
 
 Auto-reconnect on disconnect (3s delay for sensors).
 
+### REST — Settings API
+
+The Settings page communicates with the backend via REST endpoints:
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/settings` | GET | Current config + defaults + live inference stats |
+| `/settings` | PUT | Partial config update (model, confidence, IOU, imgsz) |
+| `/settings/models` | GET | Available models with name, format, and size |
+| `/ping` | GET | Health check |
+
+Model hot-swap: selecting a new model via PUT triggers a live swap in the inference thread — no server restart required. Confidence, IOU, and resolution changes take effect on the next inference frame.
+
 ---
 
 ## Project Structure
@@ -125,6 +149,7 @@ verdant-precision/
 │   │   ├── Index.tsx                  # Home — cinematic HUD landing
 │   │   ├── LiveFeed.tsx               # Live — full-screen camera + CV + sensors
 │   │   ├── About.tsx                  # System — four pillars + contact
+│   │   ├── Settings.tsx               # Configuration — CV settings + Agentic AI (planned)
 │   │   └── NotFound.tsx               # 404
 │   ├── test/
 │   │   ├── setup.ts                   # Vitest + jsdom setup
@@ -288,6 +313,63 @@ If the Pi is offline, everything degrades gracefully — simulated video plays, 
 | Testing | Vitest + Testing Library + jsdom |
 | Streaming | WebRTC (WHEP protocol) |
 | Real-time | Native WebSocket API |
+
+---
+
+## Agentic AI Roadmap
+
+TerraHawk is evolving from a monitoring platform into an **autonomous farm management system** powered by agentic AI. The agent layer sits on top of the existing CV + IoT infrastructure, adding intelligence, memory, and autonomous decision-making.
+
+### Architecture (Planned)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Agent Layer                               │
+│                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐   │
+│  │ Chat UI  │  │ Scheduler│  │ Anomaly  │  │  Kill Switch  │   │
+│  │ (FR-015) │  │ (FR-020) │  │ (FR-021) │  │   (FR-033)    │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───────┬───────┘   │
+│       │              │             │                │            │
+│       ▼              ▼             ▼                ▼            │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Farm Agent (FR-014)                          │   │
+│  │   Context (FR-016) · Providers (FR-017) · Memory (FR-023)│   │
+│  └─────────┬────────────────┬───────────────────┬───────────┘   │
+│            │                │                   │               │
+│     ┌──────▼──────┐  ┌─────▼──────┐  ┌────────▼────────┐      │
+│     │ RAG / KB    │  │  Actions   │  │  Notifications  │      │
+│     │ (FR-022)    │  │  (FR-019)  │  │    (FR-029)     │      │
+│     └─────────────┘  └─────┬──────┘  └─────────────────┘      │
+│                            │                                    │
+│                    ┌───────▼────────┐                           │
+│                    │ Approval Mode  │                           │
+│                    │   (FR-031)     │                           │
+│                    └───────┬────────┘                           │
+└────────────────────────────┼────────────────────────────────────┘
+                             │ MQTT
+                             ▼
+                    ┌─────────────────┐
+                    │  ESP32 Actuators│
+                    │  (fan/pump/shade)│
+                    └─────────────────┘
+```
+
+### Capability Groups
+
+**Core Infrastructure** — The foundation: agent backend service, chat interface, context management, and pluggable LLM providers (Claude, GPT, Gemini, Ollama for offline).
+
+**Autonomous Decision Making** — Sensor-triggered reasoning (replacing hardcoded rules with contextual intelligence), actuator control as tool calls, scheduled routines (morning briefings, health checks), and anomaly detection that catches what simple thresholds miss.
+
+**Knowledge & Memory** — ChromaDB-powered RAG with agricultural knowledge (crop care, disease identification, pest management). Persistent agent memory that learns from past decisions and outcomes. Crop profile management for zone-specific recommendations.
+
+**CV Integration** — Event summarisation (raw detections → human-readable activity logs), visual question answering via VLM ("what does the nursery look like?"), and disease/pest detection with fine-tuned models + agent-powered treatment recommendations.
+
+**Reporting & Communication** — Daily structured reports, multi-channel notifications (frontend, WhatsApp, Telegram, email) with priority routing, and a natural language dashboard that translates numbers into plain English.
+
+**Safety & Control** — Action approval mode (autonomous vs advisory per action type), complete audit logging of every agent decision with reasoning chains, and a kill switch that instantly pauses all autonomous actions while keeping observation active.
+
+> Full specifications for all 20 agentic AI features are documented in [ENGINEERING.md](./ENGINEERING.md) (FR-014 through FR-033).
 
 ---
 

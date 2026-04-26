@@ -23,6 +23,38 @@
 | [FR-011](#fr-011) | Multi-Camera Support & Camera Switching | 🔲 Planned |
 | [FR-012](#fr-012) | Configurable CV Overlay Display Modes | ✅ Shipped |
 | [FR-013](#fr-013) | Settings Page — CV & Agentic AI Configuration | 🚧 In Progress |
+| | | |
+| | **— Agentic AI: Core Infrastructure —** | |
+| [FR-014](#fr-014) | Agent Backend Service | 🔲 Planned |
+| [FR-015](#fr-015) | Agent Chat Interface | 🔲 Planned |
+| [FR-016](#fr-016) | Agent Context Window Management | 🔲 Planned |
+| [FR-017](#fr-017) | Agent Provider Abstraction | 🔲 Planned |
+| | | |
+| | **— Agentic AI: Autonomous Decision Making —** | |
+| [FR-018](#fr-018) | Sensor-Triggered Agent Reasoning | 🔲 Planned |
+| [FR-019](#fr-019) | Agent Action Execution (Actuator Control) | 🔲 Planned |
+| [FR-020](#fr-020) | Scheduled Agent Routines | 🔲 Planned |
+| [FR-021](#fr-021) | Anomaly Detection & Alerting | 🔲 Planned |
+| | | |
+| | **— Agentic AI: Knowledge & Memory —** | |
+| [FR-022](#fr-022) | Farm Knowledge Base (RAG) | 🔲 Planned |
+| [FR-023](#fr-023) | Agent Memory & Learning | 🔲 Planned |
+| [FR-024](#fr-024) | Crop Profile Management | 🔲 Planned |
+| | | |
+| | **— Agentic AI: CV Integration —** | |
+| [FR-025](#fr-025) | CV Event Summarisation | 🔲 Planned |
+| [FR-026](#fr-026) | Visual Question Answering | 🔲 Planned |
+| [FR-027](#fr-027) | Disease & Pest Detection via CV | 🔲 Planned |
+| | | |
+| | **— Agentic AI: Reporting & Communication —** | |
+| [FR-028](#fr-028) | Daily Farm Report Generation | 🔲 Planned |
+| [FR-029](#fr-029) | Multi-Channel Notifications | 🔲 Planned |
+| [FR-030](#fr-030) | Natural Language Farm Dashboard | 🔲 Planned |
+| | | |
+| | **— Agentic AI: Safety & Control —** | |
+| [FR-031](#fr-031) | Agent Action Approval Mode | 🔲 Planned |
+| [FR-032](#fr-032) | Agent Audit Log | 🔲 Planned |
+| [FR-033](#fr-033) | Agent Kill Switch | 🔲 Planned |
 
 ---
 
@@ -218,6 +250,312 @@
 | **Acceptance Criteria** | ① `GET /settings/models` returns all locally available models with name, format (pytorch/ncnn), and size ② Model hot-swap completes within 5s, inference resumes automatically on new model ③ Confidence/IOU/imgsz changes take effect on the next inference frame (no restart) ④ Stream config changes flag "restart required" in the UI ⑤ Settings page loads current values from the backend, not hardcoded defaults ⑥ Apply sends only changed values (partial update) ⑦ Reset restores original `.env` defaults ⑧ Agentic AI tab is visible but all controls are disabled with "coming soon" ⑨ Settings page is accessible from the main navigation ⑩ Invalid values (e.g. confidence > 1.0) are rejected by the backend with a 422 response |
 | **Edge Cases** | Model file deleted while selected → backend returns 404 on swap attempt, current model continues running. Model swap during active detections → inference lock prevents partial state. Large model loading time → frontend shows loading spinner, timeout at 30s. Backend offline → settings page shows connection error, retry button. Concurrent settings updates → last write wins (acceptable for single-user system). `.env` file missing → config module uses hardcoded defaults |
 | **Dependencies** | FR-003 (inference pipeline to reconfigure), FR-009 (NCNN models as swap targets), FR-012 (overlay toggles surfaced in settings) |
+
+---
+
+---
+
+# Agentic AI — Functional Requirements
+
+---
+
+## FR-014
+
+### Agent Backend Service
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | LLM-powered agent service that receives farm context (sensors, CV detections, alerts) and produces decisions, recommendations, or natural language reports |
+| **Use Case** | The agent runs as a backend service alongside FastAPI. When invoked — by user chat, sensor trigger, or schedule — it receives a structured context payload, reasons about the farm state, and returns an action or response |
+| **Technical Design** | New `agent/` package in the backend. Core class `FarmAgent` with `invoke(context, prompt) -> AgentResponse`. Uses LangChain or direct API calls. Context builder assembles latest sensor state, recent CV summary (last N detections aggregated), active alerts, and crop profiles into a structured prompt. Agent response schema: `{"reasoning": str, "action": str|null, "message": str, "confidence": float}`. FastAPI endpoint `POST /agent/invoke` for direct calls. Agent runs in an async thread pool to avoid blocking the event loop. Config: model provider, model name, temperature, max tokens — all from `config.py` |
+| **Acceptance Criteria** | ① Agent returns a structured response within 10s for standard queries ② Context payload includes latest sensor + CV + alert data ③ Agent errors (API timeout, rate limit) return graceful error responses, not server crashes ④ Agent is stateless per invocation (memory handled by FR-023) ⑤ Agent service can be disabled entirely via config flag |
+| **Edge Cases** | LLM API unreachable → return error response with `"action": null`, log the failure. Context too large for model window → truncate oldest CV events first, then sensor history. Concurrent invocations → each gets its own context snapshot, no shared mutable state. API key missing → agent service starts in disabled mode, returns 503 |
+| **Dependencies** | LLM API key configured in `.env`, Python LLM client library (anthropic/openai/google-genai) |
+
+---
+
+## FR-015
+
+### Agent Chat Interface
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Frontend page where the user can have a conversation with the farm agent — ask questions, get recommendations, and review the agent's reasoning |
+| **Use Case** | User navigates to `/agent` and types "Why is the temperature rising in chamber 01?". The agent receives the question plus full farm context, reasons about it, and responds: "Temperature has risen 4°C in the last hour. Humidity is stable, which rules out irrigation. The west-facing camera shows direct sunlight hitting the dome. Recommend activating the shade motor." |
+| **Technical Design** | **Frontend:** New page `Agent.tsx` at route `/agent`. Chat UI with message history (user messages left-aligned, agent right-aligned). Input bar at bottom with send button. Messages stored in React state. Each user message triggers `POST /agent/chat` with `{message, history[]}`. Agent response rendered with markdown support. Typing indicator while waiting. **Backend:** `POST /agent/chat` endpoint. Accepts message + conversation history. Builds context (FR-016), appends to conversation, invokes agent (FR-014), returns response. History managed client-side (sent with each request) — no server-side session state for v1. **Styling:** HUD design language — dark transparent chat bubbles, mono timestamps, accent for agent responses, scanline subtle background |
+| **Acceptance Criteria** | ① User can send messages and receive agent responses ② Conversation history maintained within session ③ Agent responses render markdown (bold, lists, code) ④ Typing indicator shown during agent processing ⑤ Chat accessible from main navigation ⑥ Error responses shown inline as system messages ⑦ Chat works on mobile (responsive layout) |
+| **Edge Cases** | Agent takes >10s → show extended typing indicator, don't timeout the UI (let backend timeout handle it). Empty message → disabled send button. Rapid messages → queue sequentially, don't fire concurrent agent calls. Page refresh → history lost (acceptable for v1, FR-023 adds persistence). Backend offline → show connection error in chat |
+| **Dependencies** | FR-014 (agent backend service), FR-016 (context assembly) |
+
+---
+
+## FR-016
+
+### Agent Context Window Management
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Assemble a structured context payload for every agent invocation containing the relevant farm state — sensors, CV detections, alerts, crop profiles, and history |
+| **Use Case** | Every time the agent is invoked, it receives a snapshot of the farm: "Temperature: 28.3°C (rising), Humidity: 54% (stable), Soil: 32% (falling). CV: 2 people detected in last 5 min, 1 animal intrusion at 03:22. Active alerts: soil moisture below threshold since 14:00. Chamber 01: tomatoes, week 6 of growth." The agent never operates blind |
+| **Technical Design** | New `agent/context.py` module. `build_context() -> FarmContext` dataclass. Sources: ① `sensor_state` — current values + rolling averages (last 1h) from a new `sensor_history` ring buffer ② `cv_state` — current detections + aggregated event log (last N minutes): object counts by class, notable events (new object types, intrusions) ③ `alert_state` — active alerts from FR-010 threshold engine ④ `crop_profiles` — from FR-024 config ⑤ `agent_memory` — relevant past decisions from FR-023. Output formatted as structured text for the LLM system prompt. Token budget: configurable max (default 2000 tokens for context), with priority-based truncation (alerts > sensors > CV > history) |
+| **Acceptance Criteria** | ① Context includes all five data sources when available ② Context stays within token budget ③ Missing sources (e.g. no crop profiles configured) are omitted gracefully, not errored ④ Sensor trends (rising/falling/stable) are computed from history ⑤ CV events are deduplicated and aggregated (not raw per-frame detections) |
+| **Edge Cases** | All sensors null (ESP32 offline) → context notes "sensor data unavailable". No CV detections in window → context notes "no objects detected". Token budget exceeded → truncate lowest-priority sections with "[truncated]" marker. First boot (no history) → context contains only current state |
+| **Dependencies** | FR-006 (sensor data), FR-003/FR-004 (CV detections), FR-010 (alerts, when implemented), FR-024 (crop profiles, when implemented) |
+
+---
+
+## FR-017
+
+### Agent Provider Abstraction
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Pluggable LLM backend allowing the agent to use Claude, GPT, Gemini, or a local model (Ollama) — swappable via settings without code changes |
+| **Use Case** | User selects "Claude" in settings with model "sonnet-4". Later switches to "Ollama" with a local Llama model for offline operation. The agent behaviour is identical — only the underlying LLM changes |
+| **Technical Design** | `agent/providers/` package with a base `LLMProvider` abstract class: `invoke(system_prompt, messages) -> str`. Concrete implementations: `ClaudeProvider`, `OpenAIProvider`, `GeminiProvider`, `OllamaProvider`. Each reads its API key from `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.). Factory function `get_provider(name) -> LLMProvider` instantiates the correct one. Provider name and model stored in `config.py`, configurable via `PUT /settings`. Ollama provider connects to `localhost:11434` for fully offline operation |
+| **Acceptance Criteria** | ① All four providers implement the same interface ② Switching providers via settings takes effect on next agent invocation (no restart) ③ Missing API key for selected provider → clear error message ④ Provider timeout configurable (default 30s) ⑤ Response format is identical regardless of provider |
+| **Edge Cases** | Provider API down → error propagated to agent service, handled per FR-014. Rate limited → retry once with backoff, then error. Ollama not running → connection refused, fallback to error response. Model name invalid for provider → provider returns descriptive error |
+| **Dependencies** | FR-014 (agent service consumes providers), FR-013 (settings page for provider/model selection) |
+
+---
+
+## FR-018
+
+### Sensor-Triggered Agent Reasoning
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | When sensor thresholds are breached, invoke the agent with full context to reason about the appropriate response — replacing hardcoded actuator rules with intelligent decision-making |
+| **Use Case** | Temperature spikes to 38°C. Instead of blindly activating the fan, the agent evaluates: temperature is high + humidity is also high + CV shows the door is open (person detected at entrance 2 min ago) → "Door likely left open. Recommend closing door before activating cooling. Sending notification." Different context, different action |
+| **Technical Design** | Extends FR-010's threshold engine. When a threshold is breached, instead of (or in addition to) firing a direct MQTT command, the engine invokes `FarmAgent.invoke()` with a trigger-specific prompt: "Sensor alert: {sensor} has reached {value}, threshold is {threshold}. Evaluate and recommend action." Agent response includes an `action` field that maps to MQTT commands. If agent mode is "autonomous" (FR-031), the action executes immediately. If "advisory", a notification is sent to the user with the agent's reasoning and a confirm/reject option |
+| **Acceptance Criteria** | ① Threshold breach triggers agent invocation within 3s ② Agent receives full context including the triggering sensor, its history, and all other current readings ③ Agent can recommend different actions for the same threshold based on context ④ Agent response is logged (FR-032) ⑤ If agent is unavailable (API down), fall back to hardcoded threshold action from FR-010 |
+| **Edge Cases** | Multiple thresholds breach simultaneously → agent invoked once with all breaches in context (batched, not per-sensor). Agent takes too long to respond → hardcoded fallback fires after timeout (configurable, default 10s). Agent recommends an action the system can't execute → log as "unsupported action", notify user. Agent says "do nothing" → respect it, log reasoning |
+| **Dependencies** | FR-010 (threshold engine), FR-014 (agent service), FR-016 (context), FR-019 (action execution) |
+
+---
+
+## FR-019
+
+### Agent Action Execution (Actuator Control)
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | The agent can execute physical actions on the farm by publishing MQTT commands to the ESP32 — fans, pumps, shade motors, lights — as structured tool calls with full audit logging |
+| **Use Case** | Agent decides soil moisture is critically low and the crop profile indicates tomatoes in fruiting stage need immediate water. Agent executes `{"action": "pump_on", "duration_sec": 120, "zone": "chamber_01"}` via MQTT. Action is logged with the agent's reasoning chain |
+| **Technical Design** | `agent/actions.py` defines available actions as a registry: `{"pump_on": {"topic": "esp32/inbox", "schema": {...}}, "fan_on": {...}, "shade_on": {...}}`. Each action has a JSON schema for parameters. The agent's response `action` field is validated against the registry, parameters are validated against the schema, then published as JSON to the appropriate MQTT topic via the existing `MQTT_Client`. Every execution creates an audit entry (FR-032): timestamp, action, parameters, agent reasoning, context snapshot hash. New `GET /agent/actions` endpoint returns available actions for the frontend settings display |
+| **Acceptance Criteria** | ① Agent can trigger any registered action via structured output ② Invalid actions are rejected and logged ③ Every action execution is audit-logged with reasoning ④ Actions include configurable safety limits (max pump duration, max fan runtime) ⑤ Action registry is config-driven, not hardcoded ⑥ Duplicate action suppression (same action within cooldown window) |
+| **Edge Cases** | MQTT broker down → action queued in memory (max 10), retried on reconnect. ESP32 doesn't acknowledge → fire-and-forget for v1, log as "unconfirmed". Agent requests unknown action → reject, log, notify user. Safety limit exceeded → cap to max, log the cap. Two actions conflict (fan_on + shade_on simultaneously) → allow for v1, conflict resolution in future |
+| **Dependencies** | FR-006 (MQTT client), FR-014 (agent service), FR-032 (audit log) |
+
+---
+
+## FR-020
+
+### Scheduled Agent Routines
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Run the agent on configurable schedules to generate reports, perform health checks, and proactively manage the farm without user prompting |
+| **Use Case** | Every morning at 07:00, the agent generates a briefing: "Overnight: temp stable 18–20°C, humidity dropped to 45% at 03:00 (recovered by 05:00), no intrusions detected. Today: forecast 32°C, recommend pre-watering at 10:00 and activating shade by 12:00." Sent to the user via their preferred channel |
+| **Technical Design** | `agent/scheduler.py` using APScheduler or a simple asyncio cron loop. Configurable routines stored in `routines.json`: `[{"name": "morning_briefing", "cron": "0 7 * * *", "prompt": "Generate morning farm briefing...", "channel": "chat"}, {"name": "health_check", "cron": "0 */6 * * *", "prompt": "Perform farm health check...", "channel": "alert"}]`. Each routine invokes `FarmAgent.invoke()` with the routine's prompt + full farm context. Output routed to the specified channel (frontend chat, notification, stored report). Routine history tracked: last run, last result, next run. New endpoints: `GET /agent/routines` (list), `PUT /agent/routines/{id}` (enable/disable/edit schedule) |
+| **Acceptance Criteria** | ① Routines execute at the configured cron time (±30s) ② Each routine receives full farm context at execution time ③ Routine results are stored and retrievable via API ④ Routines can be enabled/disabled without restart ⑤ Missed routines (server was down) are logged as missed, not retroactively executed ⑥ At least 3 default routines: morning briefing, health check (6h), daily summary |
+| **Edge Cases** | Server restarts mid-routine → routine marked as interrupted, re-runs at next schedule. Agent API down during routine → logged as failed, retried once after 5 min. Multiple routines scheduled at the same time → executed sequentially. Routine takes >60s → logged as slow, not killed |
+| **Dependencies** | FR-014 (agent service), FR-016 (context), FR-029 (notifications for delivery) |
+
+---
+
+## FR-021
+
+### Anomaly Detection & Alerting
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Agent monitors sensor and CV data streams for anomalies that simple thresholds cannot catch — gradual drifts, pattern deviations, cross-sensor contradictions, and unusual CV events |
+| **Use Case** | Temperature has been rising 0.5°C/hour for 6 hours — no single reading breaches the threshold, but the trend is abnormal. Agent detects this and alerts: "Steady temperature rise detected. At current rate, threshold will be breached in ~4 hours. Recommend investigating ventilation." |
+| **Technical Design** | `agent/anomaly.py` runs as a background async task on a configurable interval (default 15 min). Anomaly types: ① **Trend anomaly** — linear regression on sensor history (1h, 6h, 24h windows), alert if slope exceeds configurable threshold. ② **Cross-sensor contradiction** — rules like "humidity high but soil dry" or "temperature high but no sunlight detected". ③ **CV pattern anomaly** — unusual detection patterns: new object class appearing, object count outside normal range for time of day, detections in unusual zones. ④ **Flatline detection** — sensor value unchanged for >30 min (possibly sensor failure). Each anomaly produces a structured alert with severity (info/warning/critical), description, and suggested action. Alerts pushed to the frontend via a new `/ws/alerts` WebSocket |
+| **Acceptance Criteria** | ① Trend anomalies detected within one analysis cycle (15 min) ② Cross-sensor contradictions flagged with both readings shown ③ CV pattern anomalies based on rolling 24h baseline ④ Flatline detection distinguishes "truly flat" from "very stable" (configurable tolerance) ⑤ Anomaly alerts include severity, explanation, and suggested action ⑥ False positive rate manageable via sensitivity config |
+| **Edge Cases** | Insufficient history (first boot) → skip trend analysis until baseline established (min 2h). Sensor offline → skip that sensor's analysis, don't raise false anomaly. All sensors flat → could be legitimate (stable environment) or total sensor failure — flag as info, not critical. High anomaly volume → deduplicate similar anomalies, aggregate into single alert |
+| **Dependencies** | FR-006 (sensor history), FR-003/FR-004 (CV data), FR-016 (context builder for history) |
+
+---
+
+## FR-022
+
+### Farm Knowledge Base (RAG)
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Vector store containing agricultural knowledge that the agent queries when making recommendations — crop guides, disease references, pest management, optimal growing conditions |
+| **Use Case** | Agent detects early blight symptoms on tomato plants via CV. It queries the knowledge base: retrieves the disease profile, recommended treatment (copper fungicide), prevention steps, and risk to neighbouring crops. Includes this in its response to the user |
+| **Technical Design** | ChromaDB vector store running locally on the Pi (or on a companion machine if Pi resources are constrained). `agent/rag.py` handles document ingestion and retrieval. **Ingestion:** markdown/PDF documents in a `knowledge/` directory, chunked (500 tokens, 50 token overlap), embedded via a lightweight model (all-MiniLM-L6-v2 or similar). **Retrieval:** `query(text, k=5) -> list[Document]` returns top-k relevant chunks. **Integration:** Context builder (FR-016) includes RAG results when the agent's prompt relates to crop care, disease, or treatment. Agent can also explicitly request RAG lookup as a tool call. **Seeding:** Ship with a starter knowledge base: common crop care guides for tomatoes, lettuce, herbs, peppers + common diseases + pest identification |
+| **Acceptance Criteria** | ① Knowledge base loads and indexes documents on startup ② Query returns relevant results within 2s ③ Agent responses reference knowledge base content when applicable ④ New documents added to `knowledge/` are indexed on next restart (or via API trigger) ⑤ Starter knowledge base included with at least 10 crop/disease documents ⑥ Works offline (local embeddings, local vector store) |
+| **Edge Cases** | Knowledge base empty → agent operates without RAG, relies on LLM's built-in knowledge. Query returns no relevant results → agent notes "no specific guidance found in knowledge base". Corrupt document → skip with warning, don't crash ingestion. Large knowledge base (>1000 docs) → may need pagination or better chunking strategy |
+| **Dependencies** | FR-014 (agent service), ChromaDB + embedding model installed |
+
+---
+
+## FR-023
+
+### Agent Memory & Learning
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Persistent memory of past agent decisions, outcomes, and user corrections — enabling the agent to learn from the farm's specific history |
+| **Use Case** | Agent watered chamber 01 three days ago when soil hit 20%. Soil recovered to 45% within 3 hours. Today soil hits 22% in the same chamber — agent recalls: "Last watering at 20% in this chamber recovered well. Soil is close to threshold. Recommend watering now rather than waiting for breach." |
+| **Technical Design** | `agent/memory.py` with two stores: ① **Decision log** — append-only JSON lines file (`agent_memory/decisions.jsonl`): `{timestamp, trigger, context_hash, reasoning, action, outcome}`. Outcome field updated retroactively when sensor data confirms recovery or failure. ② **Learned preferences** — key-value store (`agent_memory/preferences.json`): user corrections ("don't water at night", "prefer lower confidence threshold for alerts"), extracted from chat interactions. **Retrieval:** When building context (FR-016), query decision log for similar past situations (same sensor, same threshold range) and include top 3 relevant decisions. Preferences always included in system prompt. **Retention:** Rolling 90-day window for decision log, preferences are permanent until manually removed |
+| **Acceptance Criteria** | ① Decisions are logged immediately after execution ② Outcomes are updated when follow-up data is available (e.g. sensor recovers within window) ③ Past decisions are retrievable by similarity (sensor type + value range) ④ User corrections from chat are extracted and stored as preferences ⑤ Memory files are human-readable (JSON) for inspection ⑥ Memory can be cleared via API endpoint |
+| **Edge Cases** | Decision log grows large (>10K entries) → old entries beyond 90 days are archived. Conflicting preferences → latest takes priority, log the conflict. Outcome never confirmed (sensor data gaps) → mark as "unknown". Memory files corrupted → rebuild from empty with warning, don't crash |
+| **Dependencies** | FR-014 (agent service), FR-016 (context builder includes memory) |
+
+---
+
+## FR-024
+
+### Crop Profile Management
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | User defines what is growing in each zone/chamber — crop type, growth stage, planting date, expected harvest — so the agent can contextualise all recommendations |
+| **Use Case** | User configures chamber 01: "Roma tomatoes, planted 2026-03-15, currently in fruiting stage." The agent now knows optimal temperature is 21–27°C (not generic), water needs are higher during fruiting, and harvest is expected in ~3 weeks. All alerts and recommendations are crop-specific |
+| **Technical Design** | `crop_profiles.json` config file: `[{"zone": "chamber_01", "crop": "roma_tomato", "planted": "2026-03-15", "stage": "fruiting", "notes": "organic, no pesticides"}]`. Stages: seedling → vegetative → flowering → fruiting → harvest. **Backend:** `GET /crops` returns profiles. `PUT /crops/{zone}` creates/updates. `DELETE /crops/{zone}` removes. Growth stage can be auto-advanced based on planting date + crop's typical stage durations (from knowledge base, FR-022). **Frontend:** Crop management section in settings or a dedicated page. Per-zone cards showing crop, stage (with progress bar), planting date, days to harvest. **Agent integration:** Crop profiles are always included in the context window (FR-016). Agent uses them to adjust threshold recommendations, watering schedules, and alert severity |
+| **Acceptance Criteria** | ① CRUD operations for crop profiles via API ② Crop profiles included in agent context ③ Growth stage auto-advances based on planting date (overridable manually) ④ Agent references crop-specific requirements in recommendations ⑤ Multiple zones supported with different crops ⑥ Unknown crop type → agent uses generic parameters, notes the limitation |
+| **Edge Cases** | No profiles configured → agent operates with generic parameters. Crop past expected harvest date → agent flags "harvest overdue" in daily reports. Invalid crop name → accepted (agent handles via LLM knowledge), logged as unrecognised. Zone conflict (two crops in one zone) → last write wins |
+| **Dependencies** | FR-014 (agent consumes profiles), FR-022 (crop knowledge for stage durations) |
+
+---
+
+## FR-025
+
+### CV Event Summarisation
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Agent periodically summarises raw CV detection data into human-readable event logs — transforming per-frame detections into meaningful events |
+| **Use Case** | Instead of "person detected" 10,000 times, the user sees: "3 people active in sector A between 14:00–16:00 (workers). 1 animal intrusion at gate at 03:22 (duration: 45s, class: cat). No activity from 22:00–06:00." |
+| **Technical Design** | `agent/cv_events.py` processes the CV detection stream into events. **Event aggregation logic:** ① Group consecutive detections of same tracker ID into "visits" (start_time, end_time, class, zone). ② Merge visits with gaps <30s into single events. ③ Count unique objects per class per time window. ④ Detect notable events: new class appearing, object in unusual zone, high-count anomalies. **Storage:** Event log in `cv_events.jsonl` — rolling 7-day window. **API:** `GET /cv/events?from=&to=&class=` returns filtered events. **Agent integration:** Context builder includes event summary for the relevant time window. Scheduled routines (FR-020) use event summaries in reports |
+| **Acceptance Criteria** | ① Raw detections aggregated into visit events (start, end, class, duration) ② Events queryable by time range and class ③ Summary text generated for any time window ④ Notable events flagged (intrusion, new class, high count) ⑤ Event log does not grow unbounded (7-day rolling window) ⑥ Works with any YOLO model class set (not hardcoded to COCO) |
+| **Edge Cases** | Tracker ID reassigned (ByteTrack limitation) → may create two events for one visit (acceptable). No detections for extended period → summary notes "no activity". Thousands of detections per minute → aggregation handles volume without lag. Camera offline → gap noted in event log |
+| **Dependencies** | FR-003/FR-004 (CV detection + tracking), FR-016 (context builder consumes events) |
+
+---
+
+## FR-026
+
+### Visual Question Answering
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | User asks a question about what's happening visually on the farm — the agent captures the latest frame, sends it to a vision-language model, and returns a natural language description |
+| **Use Case** | User asks "What does the nursery look like right now?". Agent grabs the latest frame from camera, sends it to a VLM with the question, and responds: "The nursery shows 12 seedling trays on the bench, all appear healthy with green growth. The humidity dome is in place. No visible pests. Lighting appears to be in the afternoon spectrum." |
+| **Technical Design** | `agent/vlm.py` — captures the latest frame from `_latest_frame` in `video.py` (or requests a fresh frame via internal API). Encodes as base64 JPEG. Sends to VLM endpoint (Claude vision, GPT-4o, Gemini Pro Vision — reuses provider abstraction from FR-017 where supported). Prompt template: "You are observing a smart farm camera feed. {user_question}. Describe what you see in the context of precision farming." Response returned to chat (FR-015) or included in reports (FR-028). **Rate limiting:** Max 1 VLM call per 30s (frames are expensive). Cache last VLM response for 30s |
+| **Acceptance Criteria** | ① Frame capture + VLM response within 15s ② Response is contextualised to farming (not generic image description) ③ Works with at least 2 providers (Claude, GPT-4o) ④ Rate limited to prevent API cost runaway ⑤ Graceful fallback if VLM unavailable ("Visual analysis unavailable, here's the latest detection data instead: ...") ⑥ Frame quality sufficient for meaningful analysis (min 640px) |
+| **Edge Cases** | Camera offline → return "Camera unavailable, cannot perform visual analysis". Frame is dark (nighttime) → VLM should note this. Provider doesn't support vision → fall back to text-only response using CV detection data. Large frame (1080p) → resize to 720p before sending to manage token cost |
+| **Dependencies** | FR-014 (agent service), FR-017 (provider with vision support), FR-003 (frame access from video pipeline) |
+
+---
+
+## FR-027
+
+### Disease & Pest Detection via CV
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Fine-tuned CV model detects plant diseases and pests, with the agent interpreting results and recommending treatment |
+| **Use Case** | The CV model detects "early_blight" on 3 tomato plants with 78% confidence. Agent cross-references the knowledge base: "Early blight detected on 3 plants in row 2. This fungal disease spreads in warm, humid conditions (current: 26°C, 72% humidity — high risk). Recommend: 1) Remove affected leaves immediately, 2) Apply copper-based fungicide within 48 hours, 3) Increase ventilation to reduce humidity. Risk to adjacent plants: moderate." |
+| **Technical Design** | **Model:** Fine-tuned YOLO model trained on plant disease dataset (PlantVillage or custom Roboflow dataset). Classes: healthy, early_blight, late_blight, powdery_mildew, leaf_miner, aphid, etc. Exported to NCNN for edge inference. Deployed as a second model alongside the general detection model, or as a swappable model via FR-013 settings. **Integration:** Detection results flow through the same `cv_state` pipeline. Agent (FR-014) recognises disease/pest class names and triggers knowledge base lookup (FR-022) for treatment recommendations. Severity assessed by: confidence, count of affected plants, spread rate over time (FR-025 event history). **Frontend:** Disease detections rendered with distinct styling on Live Feed — red/orange bounding boxes instead of green, with disease name label |
+| **Acceptance Criteria** | ① Disease model detects at least 5 common diseases/pests ② Detection confidence >70% for known classes ③ Agent provides treatment recommendations referencing the knowledge base ④ Disease detections visually distinct from normal detections on frontend ⑤ Spread tracking: agent compares current detection count vs previous day ⑥ Model runs at acceptable FPS on Pi (>3 FPS) |
+| **Edge Cases** | Low confidence detection → agent flags as "possible" not "confirmed". Healthy plants misclassified → confidence threshold reduces false positives. Model not loaded (user selected general model) → disease detection inactive, noted in agent context. Unknown disease class → agent flags as "unidentified anomaly, recommend manual inspection" |
+| **Dependencies** | FR-003 (CV pipeline), FR-009 (NCNN export), FR-022 (knowledge base for treatment), FR-014 (agent interpretation), fine-tuned model trained and exported |
+
+---
+
+## FR-028
+
+### Daily Farm Report Generation
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Agent generates a structured daily report covering sensor trends, CV events, alerts, actions taken, and recommendations — stored and viewable on the frontend |
+| **Use Case** | Every evening at 20:00, the agent produces: "**Daily Report — 2026-04-26**. Temperature: 18–31°C (avg 24.2°C), peaked at 13:00. Humidity: 45–72%. Soil moisture: stable at 35%. CV: 5 people, 2 animal intrusions, 0 disease detections. Alerts: 1 temperature threshold at 13:12 (shade activated). Actions: auto-watered at 10:00 (120s), shade activated at 13:12. Recommendations: soil moisture trending down, schedule watering for tomorrow AM." |
+| **Technical Design** | Triggered by scheduled routine (FR-020) with a report-specific prompt. Context builder (FR-016) provides full 24h data. Agent produces structured markdown report. **Storage:** `reports/YYYY-MM-DD.md` files in the backend. **API:** `GET /reports` (list), `GET /reports/{date}` (single report). **Frontend:** Reports page or section showing report history with expandable daily entries. Rendered as markdown. **Report template:** Agent follows a structured prompt: sections for Environment (sensor summary), Activity (CV events), Alerts & Actions, Crop Status, Recommendations. Each section has data + interpretation |
+| **Acceptance Criteria** | ① Report generated daily at configured time ② Report covers full 24h period ③ All sections populated with actual data ④ Reports stored and retrievable via API ⑤ Reports viewable on frontend with markdown rendering ⑥ Historical reports accessible (last 30 days minimum) ⑦ Report includes both data and agent interpretation |
+| **Edge Cases** | Incomplete data (sensor gaps) → report notes the gap period. No CV events → section states "no activity detected". Agent API fails → report generation retried once, then logged as failed. Server was down part of the day → report covers available data, notes downtime |
+| **Dependencies** | FR-014 (agent service), FR-016 (24h context), FR-020 (scheduler), FR-025 (CV event summaries) |
+
+---
+
+## FR-029
+
+### Multi-Channel Notifications
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Agent sends alerts, reports, and messages to the user via their preferred channel — frontend, email, WhatsApp, or Telegram — with priority-based routing |
+| **Use Case** | Critical alert (temperature >40°C) → immediate push to WhatsApp + frontend toast. Daily report → Telegram at 20:00. Advisory recommendation → frontend chat only. User configures preferences in settings |
+| **Technical Design** | `agent/notifications.py` with channel abstraction. **Channels:** ① Frontend — push via `/ws/alerts` WebSocket (toast/banner). ② Email — SMTP via `smtplib` or SendGrid API. ③ WhatsApp — via Twilio API or WhatsApp Business API. ④ Telegram — via Bot API (existing TerraHawk bot). **Routing:** `notification_config.json` maps priority levels to channels: `{"critical": ["whatsapp", "frontend"], "warning": ["telegram", "frontend"], "info": ["frontend"]}`. **API:** `POST /notifications/send` (internal, used by agent). `GET /notifications` (history). `PUT /notifications/config` (user preferences). **Rate limiting:** Max 10 notifications/hour per channel to prevent spam |
+| **Acceptance Criteria** | ① Notifications delivered to configured channels within 30s ② Priority-based routing respects user configuration ③ At least 2 channels functional at launch (frontend + one external) ④ Notification history stored and queryable ⑤ Rate limiting prevents notification spam ⑥ Channel failure doesn't block other channels (send to all, log failures) |
+| **Edge Cases** | All external channels fail → frontend always works as fallback. User has no external channels configured → frontend only. Duplicate notifications (same alert, same minute) → deduplicated. Notification during quiet hours (configurable, e.g. 23:00–07:00) → critical only, others queued for morning |
+| **Dependencies** | FR-014 (agent produces notifications), external channel API keys configured |
+
+---
+
+## FR-030
+
+### Natural Language Farm Dashboard
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Agent generates a plain-English status line that updates periodically, providing an at-a-glance summary of the farm state on the home page or live feed |
+| **Use Case** | Instead of just numbers, the home page shows: "Everything looks healthy. Temperature stable at 23°C, last watered 2 hours ago, soil moisture is good. Next scheduled check at 18:00. No alerts." This updates every 15 minutes |
+| **Technical Design** | `agent/dashboard.py` runs on a 15-minute interval. Invokes the agent with a concise prompt: "Generate a one-paragraph farm status summary in plain English. Be concise and friendly. Mention anything that needs attention." Response stored in a shared `dashboard_state` dict: `{"summary": str, "updated_at": float, "status": "healthy|attention|critical"}`. **API:** `GET /dashboard/summary` returns latest summary. **Frontend:** `useDashboardSummary` hook polls every 60s. Rendered on the Index page below the hero section and on the Live Feed as a collapsible HUD element. Status drives a colour indicator: green (healthy), amber (attention), red (critical) |
+| **Acceptance Criteria** | ① Summary updates every 15 minutes ② Summary is ≤3 sentences, plain English ③ Status level (healthy/attention/critical) derived from summary content ④ Summary available via API and rendered on frontend ⑤ Stale summary (>30 min old) flagged with "last updated X min ago" ⑥ Summary reflects actual farm state (not generic) |
+| **Edge Cases** | Agent unavailable → last summary retained with "stale" indicator. Farm has no data yet (first boot) → "Farm is starting up. Sensors and cameras are initialising." All systems critical → summary focuses on the most urgent issue first. Summary generation fails → retain previous summary, log error |
+| **Dependencies** | FR-014 (agent service), FR-016 (context), FR-020 (scheduler for periodic updates) |
+
+---
+
+## FR-031
+
+### Agent Action Approval Mode
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Configurable per-action-type: autonomous (agent acts immediately) or advisory (agent proposes, user confirms). Critical actions always require approval |
+| **Use Case** | Agent wants to activate the pump. Mode is "advisory". User receives: "💧 Soil moisture at 18% in chamber 01. I recommend watering for 120 seconds. [Approve] [Reject] [Modify]". User taps Approve. Pump activates. If mode were "autonomous", the pump would have activated immediately with a notification sent after |
+| **Technical Design** | `agent/approval.py` manages action approval flow. **Config:** `approval_config.json` maps actions to modes: `{"pump_on": "advisory", "fan_on": "autonomous", "shade_on": "autonomous", "emergency_stop": "always_approve"}`. Three modes: `autonomous` (execute + notify), `advisory` (propose + wait for approval), `always_approve` (never auto-execute, even in autonomous global mode). **Pending actions queue:** When advisory, action stored in `pending_actions` list with TTL (default 30 min). **API:** `GET /agent/pending` (list pending actions). `POST /agent/pending/{id}/approve` (execute). `POST /agent/pending/{id}/reject` (discard with reason). **Frontend:** Pending action cards appear on the Live Feed or Agent chat with approve/reject buttons. **Notification:** Pending actions trigger notification (FR-029) on configured channels |
+| **Acceptance Criteria** | ① Autonomous actions execute immediately and log ② Advisory actions create pending items and notify ③ Pending actions expire after TTL (configurable) ④ Approve executes the action, reject discards with logged reason ⑤ `always_approve` actions are never auto-executed regardless of global mode ⑥ Global override: settings can switch all actions to advisory mode (safety mode) |
+| **Edge Cases** | Pending action expires → logged as "expired, not executed", agent notified for follow-up. User offline (no approval within TTL) → action expires, agent may re-evaluate on next cycle. Conflicting approvals (approve + reject race) → first response wins. Agent proposes action while previous pending for same actuator → replaces previous pending |
+| **Dependencies** | FR-019 (action execution), FR-029 (notifications for approval requests), FR-013 (settings for mode config) |
+
+---
+
+## FR-032
+
+### Agent Audit Log
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | Every agent decision is logged with full context — timestamp, input, reasoning, action taken, and outcome — viewable on the frontend for transparency and debugging |
+| **Use Case** | User wonders "Why did the pump activate at 3 AM?". Opens the audit log, finds the entry: "03:12 — Trigger: soil moisture 16% (threshold 20%). Context: chamber 01, tomatoes fruiting stage, last watered 18h ago. Reasoning: soil critically low, crop in high-water-demand stage, night watering acceptable for this crop. Action: pump_on, 90s. Outcome: soil recovered to 38% by 05:00." |
+| **Technical Design** | `agent/audit.py` — append-only structured log. **Storage:** `audit/YYYY-MM-DD.jsonl` files. Each entry: `{"timestamp", "trigger" (chat/sensor/schedule/anomaly), "context_summary", "prompt", "reasoning", "action", "action_params", "approval_mode", "approved_by" (user/auto/expired), "outcome", "model_used", "latency_ms", "tokens_used"}`. **API:** `GET /agent/audit?from=&to=&trigger=&action=` with filtering and pagination. **Frontend:** Audit log page or panel. Each entry expandable to show full reasoning chain. Filter by trigger type, action type, date range. Timeline view with icons per trigger type. **Retention:** 90-day rolling window, older entries archived to compressed files |
+| **Acceptance Criteria** | ① Every agent invocation creates an audit entry (no exceptions) ② Entries include full reasoning chain, not just the action ③ Audit log queryable by date, trigger type, and action type ④ Frontend renders audit entries with expandable detail ⑤ Audit log is append-only (no edits or deletions via API) ⑥ Outcome field updated when follow-up data is available ⑦ Log files are human-readable JSON |
+| **Edge Cases** | Disk full → log to stderr as fallback, alert user. Corrupt log file → start new file, log the corruption. High-frequency triggers (many sensor alerts) → log all, but UI paginates. Agent invocation with no action (informational response) → still logged with `"action": null` |
+| **Dependencies** | FR-014 (agent service produces entries), FR-019 (action execution populates action fields) |
+
+---
+
+## FR-033
+
+### Agent Kill Switch
+
+| Stage | Detail |
+|---|---|
+| **Functional Requirement** | One-click disable all autonomous agent actions from the frontend. Agent continues observing, analysing, and reporting — but cannot execute any actuator commands |
+| **Use Case** | User notices something unexpected — the agent keeps activating the pump. One click on the kill switch: all autonomous actions stop immediately. Agent still responds in chat, still generates reports, still detects anomalies — but hands are tied. Visual indicator on every page: "🔴 AGENT ACTIONS PAUSED". User re-enables when confident |
+| **Technical Design** | **Backend:** Boolean flag in `config.py`: `agent_actions_enabled` (default `true`). `PUT /settings` accepts `{"agent_actions_enabled": false}`. When false, `agent/actions.py` rejects all action executions with reason "kill switch active". Agent invocations still run — responses include actions in advisory mode regardless of per-action config. All rejected actions logged in audit (FR-032) with `"blocked_by": "kill_switch"`. **Frontend:** Prominent toggle on the Live Feed HUD (top bar) and Settings page. When active: red pulsing indicator visible on all pages. Confirmation dialog on disable: "This will pause all autonomous agent actions. The agent will continue monitoring and reporting. Are you sure?" **API:** `GET /agent/status` returns `{"actions_enabled": bool, "disabled_since": timestamp|null}` |
+| **Acceptance Criteria** | ① Kill switch disables all actuator commands within 1s ② Agent continues all non-action functions (chat, reports, anomaly detection) ③ Visual indicator visible on Live Feed and Settings when active ④ All blocked actions logged with kill switch reason ⑤ Re-enabling requires explicit user action (no auto-re-enable) ⑥ Kill switch state persists across server restarts ⑦ Confirmation dialog prevents accidental toggle |
+| **Edge Cases** | Kill switch activated during pending advisory action → pending action stays pending but cannot be approved while switch is active. Server restarts while kill switch active → remains active (persisted to config). Agent recommends action while switch is on → logged as "recommended but blocked", user notified. Both kill switch and approval mode active → kill switch takes priority |
+| **Dependencies** | FR-019 (action execution respects the flag), FR-013 (settings UI for the toggle), FR-032 (audit logging of blocked actions) |
 
 ---
 
