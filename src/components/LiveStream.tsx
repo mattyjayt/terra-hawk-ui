@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import Hls from "hls.js";
 import simTerrariumAsset from "@/assets/sim-terrarium.mp4.asset.json";
 
 /**
- * WebRTC live stream via the WHEP protocol (MediaMTX, go2rtc, etc).
+ * HLS live stream via MediaMTX.
  *
  * Env var (set in your .env):
- *   VITE_LIVESTREAM_URL=http(s)://<ip>:8889/<path>/whep
+ *   VITE_LIVESTREAM_URL=https://stream.terra-hawk.com/stream/
  *
+ * MediaMTX serves an HLS playlist at <url>/index.m3u8
  * Falls back to a looping simulated terrarium feed if unreachable.
  */
 
@@ -24,61 +26,48 @@ interface Props {
 }
 
 const STREAM_URL = import.meta.env.VITE_LIVESTREAM_URL as string | undefined;
-const CONNECT_TIMEOUT_MS = 6000;
+const CONNECT_TIMEOUT_MS = 10000;
 
 const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const simVideoRef = useRef<HTMLVideoElement>(null);
-  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [status, setStatus] = useState<Status>("idle");
-  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
     onStatusChange?.(status);
   }, [status, onStatusChange]);
 
+  // Report basic stats when live
   useEffect(() => {
-    if (status !== "live" || !pcRef.current) return;
+    if (status !== "live" || !liveVideoRef.current) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const pc = pcRef.current;
-        if (!pc) return;
-        const stats = await pc.getStats();
+    const interval = setInterval(() => {
+      const video = liveVideoRef.current;
+      if (!video) return;
 
-        let fps = 0;
-        let latency = 0;
-
-        stats.forEach((report) => {
-          if (report.type === "inbound-rtp" && report.kind === "video") {
-            if (report.framesPerSecond) fps = report.framesPerSecond;
-          }
-          if (report.type === "candidate-pair" && report.state === "succeeded") {
-            if (report.currentRoundTripTime) latency = report.currentRoundTripTime * 1000;
-          }
-        });
-
-        onStats?.({ fps, latency });
-      } catch (e) {
-        console.warn("[LiveStream] getStats error:", e);
+      // Estimate latency from buffered range
+      let latency = 0;
+      if (video.buffered.length > 0) {
+        const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+        latency = (bufferedEnd - video.currentTime) * 1000;
       }
+
+      // HLS doesn't expose FPS directly; use webkitDecodedFrameCount if available
+      const vAny = video as any;
+      const fps = vAny.webkitDecodedFrameCount
+        ? Math.round(vAny.webkitDecodedFrameCount / Math.max(video.currentTime, 1))
+        : 0;
+
+      onStats?.({ fps, latency });
     }, 1000);
 
     return () => clearInterval(interval);
   }, [status, onStats]);
 
-  // Attach stream to <video> whenever either changes. The live <video> is
-  // always mounted, so the ref is available as soon as the stream arrives.
-  useEffect(() => {
-    const v = liveVideoRef.current;
-    if (v && mediaStream && v.srcObject !== mediaStream) {
-      v.srcObject = mediaStream;
-      v.play().catch((e) => console.warn("[LiveStream] play() rejected:", e));
-    }
-  }, [mediaStream]);
-
   useEffect(() => {
     let cancelled = false;
+    const video = liveVideoRef.current;
 
     const fallback = (reason: string) => {
       if (cancelled) return;
@@ -87,86 +76,85 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
       simVideoRef.current?.play().catch(() => {});
     };
 
-    const connect = async () => {
-      if (!STREAM_URL) {
+    const connect = () => {
+      if (!STREAM_URL || !video) {
         fallback("VITE_LIVESTREAM_URL not set");
         return;
       }
 
-      console.info("[LiveStream] connecting to", STREAM_URL);
+      // Build the m3u8 URL — append index.m3u8 if not already present
+      const hlsUrl = STREAM_URL.endsWith(".m3u8")
+        ? STREAM_URL
+        : `${STREAM_URL.replace(/\/$/, "")}/index.m3u8`;
+
+      console.info("[LiveStream] connecting to HLS:", hlsUrl);
       setStatus("connecting");
 
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
-      pcRef.current = pc;
-
-      pc.addTransceiver("video", { direction: "recvonly" });
-      pc.addTransceiver("audio", { direction: "recvonly" });
-
-      pc.ontrack = (event) => {
-        console.info(
-          "[LiveStream] ontrack",
-          event.track.kind,
-          "streams:",
-          event.streams.length,
-        );
-        const stream = event.streams[0] ?? new MediaStream([event.track]);
-        if (!cancelled) setMediaStream(stream);
-      };
-
-      pc.onconnectionstatechange = () => {
-        if (cancelled) return;
-        console.info("[LiveStream] connectionState:", pc.connectionState);
-        if (pc.connectionState === "connected") setStatus("live");
-        if (
-          pc.connectionState === "failed" ||
-          pc.connectionState === "disconnected" ||
-          pc.connectionState === "closed"
-        ) {
-          fallback(`pc state ${pc.connectionState}`);
-        }
-      };
-
-      pc.oniceconnectionstatechange = () => {
-        console.info("[LiveStream] iceConnectionState:", pc.iceConnectionState);
-      };
-
       const timeout = setTimeout(() => {
-        if (pc.connectionState !== "connected") {
-          try { pc.close(); } catch { /* noop */ }
-          fallback("connect timeout");
-        }
+        if (status !== "live") fallback("connect timeout");
       }, CONNECT_TIMEOUT_MS);
 
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        const res = await fetch(STREAM_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/sdp" },
-          body: offer.sdp ?? "",
+      // Safari has native HLS support
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = hlsUrl;
+        video.addEventListener("loadedmetadata", () => {
+          clearTimeout(timeout);
+          if (!cancelled) {
+            video.play().catch(() => {});
+            setStatus("live");
+          }
         });
-
-        if (!res.ok) throw new Error(`WHEP HTTP ${res.status}`);
-        const answerSdp = await res.text();
-        await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
-        console.info("[LiveStream] WHEP handshake OK");
-        clearTimeout(timeout);
-      } catch (err) {
-        clearTimeout(timeout);
-        try { pc.close(); } catch { /* noop */ }
-        fallback(`handshake error: ${(err as Error).message}`);
+        video.addEventListener("error", () => {
+          clearTimeout(timeout);
+          fallback("native HLS error");
+        });
+        return;
       }
+
+      // Other browsers use hls.js
+      if (!Hls.isSupported()) {
+        fallback("HLS not supported in this browser");
+        return;
+      }
+
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        liveSyncDurationCount: 1,
+        liveMaxLatencyDurationCount: 3,
+      });
+      hlsRef.current = hls;
+
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        clearTimeout(timeout);
+        if (!cancelled) {
+          video.play().catch(() => {});
+          setStatus("live");
+        }
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.warn("[LiveStream] HLS error:", data.type, data.details);
+        if (data.fatal) {
+          clearTimeout(timeout);
+          hls.destroy();
+          hlsRef.current = null;
+          fallback(`HLS fatal: ${data.details}`);
+        }
+      });
     };
 
     connect();
 
     return () => {
       cancelled = true;
-      try { pcRef.current?.close(); } catch { /* noop */ }
-      pcRef.current = null;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
     };
   }, []);
 
@@ -174,7 +162,6 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
 
   return (
     <div className={className}>
-      {/* Always mounted so the ref exists when ontrack fires */}
       <video
         ref={liveVideoRef}
         className="absolute inset-0 h-full w-full object-cover animate-slow-zoom"
@@ -183,12 +170,11 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
         muted
         style={{
           filter: "saturate(118%) contrast(1.06) brightness(0.95)",
-          opacity: showLive && mediaStream ? 1 : 0,
+          opacity: showLive ? 1 : 0,
           transition: "opacity 600ms ease",
         }}
       />
-      {/* Simulated fallback sits underneath; visible when not live */}
-      {!(status === "live" && mediaStream) && (
+      {status !== "live" && (
         <video
           ref={simVideoRef}
           src={simTerrariumAsset.url}
