@@ -83,9 +83,11 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
       }
 
       // Build the m3u8 URL — append index.m3u8 if not already present
-      const hlsUrl = STREAM_URL.endsWith(".m3u8")
+      // cookieCheck=1 bypasses MediaMTX's cookie redirect (breaks cross-origin HLS)
+      const base = STREAM_URL.endsWith(".m3u8")
         ? STREAM_URL
         : `${STREAM_URL.replace(/\/$/, "")}/index.m3u8`;
+      const hlsUrl = `${base}?cookieCheck=1`;
 
       console.info("[LiveStream] connecting to HLS:", hlsUrl);
       setStatus("connecting");
