@@ -34,11 +34,17 @@ export interface SystemInfo {
 }
 
 function getApiBase(): string {
+  const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (apiUrl) return apiUrl.replace(/\/+$/, "");
+
+  // Fallback: derive from stream URL or default to localhost
   const streamUrl = import.meta.env.VITE_LIVESTREAM_URL as string | undefined;
   if (streamUrl) {
     try {
-      const hostname = new URL(streamUrl).hostname;
-      return `http://${hostname}:8000`;
+      const url = new URL(streamUrl);
+      const protocol = url.protocol; // preserves https:
+      const hostname = url.hostname;
+      return `${protocol}//${hostname}:8000`;
     } catch { /* fall through */ }
   }
   return "http://localhost:8000";

@@ -13,15 +13,26 @@ export interface CVData {
   objects: CVObject[];
 }
 
-function getApiHostname(): string {
+function getWsBase(): string {
+  const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (apiUrl) {
+    try {
+      const url = new URL(apiUrl);
+      const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
+      return `${wsProtocol}//${url.host}`;
+    } catch { /* fall through */ }
+  }
+
+  // Fallback: derive from stream URL
   const streamUrl = import.meta.env.VITE_LIVESTREAM_URL as string | undefined;
   if (streamUrl) {
     try {
-      return new URL(streamUrl).hostname;
-      // return "localhost"
+      const url = new URL(streamUrl);
+      const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
+      return `${wsProtocol}//${url.hostname}:8000`;
     } catch { /* fall through */ }
   }
-  return "localhost";
+  return "ws://localhost:8000";
 }
 
 /**
@@ -40,11 +51,11 @@ export function useSensorData(systemId?: string) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const hostname = getApiHostname();
+    const wsBase = getWsBase();
     const sensorPath = systemId ? `/ws/sensors/${systemId}` : "/ws/sensors";
     const cvPath = systemId ? `/ws/cv/${systemId}` : "/ws/cv";
-    const wsUrl = `ws://${hostname}:8000${sensorPath}`;
-    const wsCVUrl = `ws://${hostname}:8000${cvPath}`;
+    const wsUrl = `${wsBase}${sensorPath}`;
+    const wsCVUrl = `${wsBase}${cvPath}`;
 
     let ws: WebSocket;
     let wsCV: WebSocket;

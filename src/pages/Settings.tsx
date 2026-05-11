@@ -19,12 +19,14 @@ import { Settings2, Bot, Loader2 } from "lucide-react";
 // ---------------------------------------------------------------------------
 
 function apiBase(): string {
+  const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (apiUrl) return apiUrl.replace(/\/+$/, "");
+
   const streamUrl = import.meta.env.VITE_LIVESTREAM_URL as string | undefined;
   if (streamUrl) {
     try {
-      const hostname = new URL(streamUrl).hostname;
-      // return `http://${hostname}:8000`;
-      return 'http://localhost:8000'
+      const url = new URL(streamUrl);
+      return `${url.protocol}//${url.hostname}:8000`;
     } catch { /* fall through */ }
   }
   return "http://localhost:8000";
