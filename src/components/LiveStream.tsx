@@ -4,10 +4,8 @@ import simTerrariumAsset from "@/assets/sim-terrarium.mp4.asset.json";
 /**
  * WebRTC live stream via MediaMTX WHEP.
  *
- * Env var (set in your .env):
- *   VITE_WHEP_URL=https://rtc.terra-hawk.com/stream/whep
- *
- * Falls back to a looping simulated terrarium feed if unreachable.
+ * Accepts a dynamic `whepUrl` prop for multi-camera support.
+ * Falls back to VITE_WHEP_URL env var, then to a looping simulated feed.
  */
 
 type Status = "idle" | "connecting" | "live" | "simulated";
@@ -19,18 +17,21 @@ export interface StreamStats {
 
 interface Props {
   className?: string;
+  whepUrl?: string;
   onStatusChange?: (s: Status) => void;
   onStats?: (stats: StreamStats) => void;
 }
 
-const WHEP_URL = import.meta.env.VITE_WHEP_URL as string | undefined;
+const DEFAULT_WHEP_URL = import.meta.env.VITE_WHEP_URL as string | undefined;
 const CONNECT_TIMEOUT_MS = 10000;
 
-const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
+const LiveStream = ({ className, whepUrl, onStatusChange, onStats }: Props) => {
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const simVideoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState<Status>("idle");
+
+  const resolvedUrl = whepUrl || DEFAULT_WHEP_URL;
 
   useEffect(() => {
     onStatusChange?.(status);
@@ -62,7 +63,6 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
             prevFrames = decoded;
             prevTime = now;
 
-            // jitterBufferDelay / jitterBufferEmittedCount ≈ buffer latency
             if (report.jitterBufferDelay && report.jitterBufferEmittedCount) {
               latency = Math.round(
                 (report.jitterBufferDelay / report.jitterBufferEmittedCount) * 1000
@@ -80,6 +80,7 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
     return () => clearInterval(interval);
   }, [status, onStats]);
 
+  // Reconnect when URL changes
   useEffect(() => {
     let cancelled = false;
     const video = liveVideoRef.current;
@@ -92,12 +93,12 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
     };
 
     const connect = () => {
-      if (!WHEP_URL || !video) {
-        fallback("VITE_WHEP_URL not set");
+      if (!resolvedUrl || !video) {
+        fallback("No WHEP URL available");
         return;
       }
 
-      console.info("[LiveStream] connecting via WHEP:", WHEP_URL);
+      console.info("[LiveStream] connecting via WHEP:", resolvedUrl);
       setStatus("connecting");
 
       const timeout = setTimeout(() => {
@@ -111,7 +112,6 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
       });
       pcRef.current = pc;
 
-      // Receive video track → attach to <video>
       pc.ontrack = (event) => {
         clearTimeout(timeout);
         if (!cancelled) {
@@ -128,7 +128,6 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
         }
       };
 
-      // Create offer with recvonly video
       pc.addTransceiver("video", { direction: "recvonly" });
 
       pc.createOffer()
@@ -145,13 +144,12 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
                 }
               };
               pc.addEventListener("icegatheringstatechange", check);
-              // Safety timeout for ICE gathering
               setTimeout(resolve, 3000);
             }
           });
         })
         .then(() => {
-          return fetch(WHEP_URL, {
+          return fetch(resolvedUrl, {
             method: "POST",
             headers: { "Content-Type": "application/sdp" },
             body: pc.localDescription!.sdp,
@@ -180,7 +178,7 @@ const LiveStream = ({ className, onStatusChange, onStats }: Props) => {
         pcRef.current = null;
       }
     };
-  }, []);
+  }, [resolvedUrl]);
 
   const showLive = status === "live" || status === "connecting";
 

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Camera, ChevronDown } from "lucide-react";
 import LiveStream, { type StreamStatus, type StreamStats } from "@/components/LiveStream";
 import { useSensorData } from "@/hooks/useSensorData";
-import { useSystems } from "@/hooks/useSystems";
+import { useSystems, type SystemInfo } from "@/hooks/useSystems";
 
 type Metric = { label: string; value: string; unit: string };
 
@@ -34,6 +34,102 @@ const getInitialOverlayConfig = (): OverlayConfig => {
   return { boxes: true, labels: true, confidence: true };
 };
 
+/**
+ * Resolve the WHEP URL for a system's camera.
+ * Uses the whep_url from systems.json if available,
+ * otherwise derives from VITE_WHEP_URL base by swapping the stream path.
+ */
+function resolveWhepUrl(system: SystemInfo | null): string | undefined {
+  if (!system?.components?.camera) return undefined;
+  const cam = system.components.camera;
+
+  // If backend provides a whep_url, convert it to the external tunnel URL
+  if (cam.whep_url) {
+    // whep_url from backend is local (e.g. http://192.168.178.147:8889/stream/whep)
+    // We need the external tunnel URL. Derive from VITE_WHEP_URL base.
+    const baseWhep = import.meta.env.VITE_WHEP_URL as string | undefined;
+    if (baseWhep) {
+      try {
+        const base = new URL(baseWhep);
+        const local = new URL(cam.whep_url);
+        // Replace the path with the one from the local URL
+        base.pathname = local.pathname;
+        return base.toString();
+      } catch {
+        // Fall through to direct use
+      }
+    }
+    return cam.whep_url;
+  }
+
+  return undefined;
+}
+
+/** System / camera selector dropdown */
+const SystemSwitcher = ({
+  systems,
+  activeId,
+  onSelect,
+}: {
+  systems: SystemInfo[];
+  activeId: string | undefined;
+  onSelect: (id: string) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+
+  // Only show systems that have cameras
+  const cameraSystems = systems.filter((s) => s.components?.camera);
+  if (cameraSystems.length <= 1) return null;
+
+  const active = cameraSystems.find((s) => s.id === activeId) ?? cameraSystems[0];
+
+  return (
+    <div className="pointer-events-auto relative">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="flex items-center gap-2 rounded border border-foreground/20 bg-background/40 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.25em] text-foreground/90 backdrop-blur-sm transition hover:border-accent hover:text-accent"
+      >
+        <Camera className="h-3 w-3" />
+        {active?.name ?? "Select Camera"}
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 flex flex-col overflow-hidden rounded border border-foreground/20 bg-background/90 backdrop-blur-md animate-fade-in">
+          {cameraSystems.map((s) => {
+            const isActive = s.id === active?.id;
+            const isOnline = s.status === "online" || s.controller?.ip === "localhost";
+            return (
+              <button
+                key={s.id}
+                onClick={() => {
+                  onSelect(s.id);
+                  setOpen(false);
+                }}
+                className={`flex items-center gap-3 px-4 py-2 text-left font-mono text-[10px] uppercase tracking-[0.2em] transition ${
+                  isActive
+                    ? "bg-accent/10 text-accent"
+                    : "text-foreground/70 hover:bg-foreground/5 hover:text-foreground"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isOnline ? "bg-accent animate-pulse-glow" : "bg-foreground/30"
+                  }`}
+                />
+                <span className="min-w-[100px]">{s.name}</span>
+                <span className="text-[8px] text-foreground/40">
+                  {s.components?.camera?.type ?? "camera"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CornerBrackets = ({ mounted }: { mounted: boolean }) => {
   const base = `pointer-events-none absolute z-[5] h-8 w-8 border-foreground/75 transition-opacity duration-1000 ${mounted ? "opacity-90" : "opacity-0"
     }`;
@@ -55,6 +151,7 @@ const LiveFeed = () => {
   const { systems } = useSystems();
   const [activeSystemId, setActiveSystemId] = useState<string | undefined>(undefined);
   const activeSystem = systems.find((s) => s.id === activeSystemId) ?? systems[0] ?? null;
+  const activeWhepUrl = resolveWhepUrl(activeSystem);
   const { data: sensorData, cvData } = useSensorData(activeSystem?.id);
   const [overlayConfig, setOverlayConfig] = useState<OverlayConfig>(getInitialOverlayConfig());
   const [isOverlayPanelOpen, setIsOverlayPanelOpen] = useState(false);
@@ -73,6 +170,8 @@ const LiveFeed = () => {
   }, [overlayConfig]);
 
   useEffect(() => {
+    const cameraSystems = systems.filter((s) => s.components?.camera);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       
@@ -90,11 +189,17 @@ const LiveFeed = () => {
           setOverlayConfig({ boxes: false, labels: false, confidence: false });
           break;
       }
+
+      // Number keys 1-9 to switch cameras
+      const num = parseInt(e.key);
+      if (num >= 1 && num <= cameraSystems.length) {
+        setActiveSystemId(cameraSystems[num - 1].id);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [systems]);
 
   const dynamicMetrics = Object.entries(sensorData)
     .filter(([key]) => key !== "status")
@@ -151,6 +256,7 @@ const LiveFeed = () => {
       <div aria-hidden className="fixed inset-0 -z-[5] overflow-hidden">
         <LiveStream
           className="absolute inset-0 h-full w-full"
+          whepUrl={activeWhepUrl}
           onStatusChange={setStreamStatus}
           onStats={setStreamStats}
         />
@@ -299,13 +405,21 @@ const LiveFeed = () => {
 
       {/* Top HUD bar — back + REC + clock */}
       <div className="pointer-events-none absolute inset-x-0 top-10 z-10 mx-auto flex max-w-[1440px] items-center justify-between px-10">
-        <Link
-          to="/"
-          className="pointer-events-auto inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground hud-text transition hover:text-accent"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
-          back
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/"
+            className="pointer-events-auto inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground hud-text transition hover:text-accent"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+            back
+          </Link>
+
+          <SystemSwitcher
+            systems={systems}
+            activeId={activeSystem?.id}
+            onSelect={setActiveSystemId}
+          />
+        </div>
 
         <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground hud-text">
           {streamStatus === "live" ? (
