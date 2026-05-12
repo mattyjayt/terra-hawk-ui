@@ -87,11 +87,11 @@ const SystemSwitcher = ({
     <div className="pointer-events-auto relative">
       <button
         onClick={() => setOpen((p) => !p)}
-        className="flex items-center gap-2 rounded border border-foreground/20 bg-background/40 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.25em] text-foreground/90 backdrop-blur-sm transition hover:border-accent hover:text-accent"
+        className="flex items-center gap-1.5 rounded border border-foreground/20 bg-background/40 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.2em] text-foreground/90 backdrop-blur-sm transition hover:border-accent hover:text-accent sm:gap-2 sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em]"
       >
         <Camera className="h-3 w-3" />
-        {active?.name ?? "Select Camera"}
-        <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+        <span className="max-w-[80px] truncate sm:max-w-none">{active?.name ?? "Select Camera"}</span>
+        <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
@@ -131,14 +131,14 @@ const SystemSwitcher = ({
 };
 
 const CornerBrackets = ({ mounted }: { mounted: boolean }) => {
-  const base = `pointer-events-none absolute z-[5] h-8 w-8 border-foreground/75 transition-opacity duration-1000 ${mounted ? "opacity-90" : "opacity-0"
+  const base = `pointer-events-none absolute z-[5] h-6 w-6 border-foreground/75 transition-opacity duration-1000 sm:h-8 sm:w-8 ${mounted ? "opacity-90" : "opacity-0"
     }`;
   return (
     <>
-      <div className={`${base} left-6 top-6 border-l border-t`} />
-      <div className={`${base} right-6 top-6 border-r border-t`} />
-      <div className={`${base} left-6 bottom-6 border-l border-b`} />
-      <div className={`${base} right-6 bottom-6 border-r border-b`} />
+      <div className={`${base} left-2 top-2 border-l border-t sm:left-6 sm:top-6`} />
+      <div className={`${base} right-2 top-2 border-r border-t sm:right-6 sm:top-6`} />
+      <div className={`${base} left-2 bottom-2 border-l border-b sm:left-6 sm:bottom-6`} />
+      <div className={`${base} right-2 bottom-2 border-r border-b sm:right-6 sm:bottom-6`} />
     </>
   );
 };
@@ -329,7 +329,7 @@ const LiveFeed = () => {
       <CornerBrackets mounted={mounted} />
 
       {/* Overlay Configuration Panel */}
-      <div className="pointer-events-auto absolute right-10 top-24 z-30 flex flex-col items-end gap-3 animate-fade-up">
+      <div className="pointer-events-auto absolute right-4 top-16 z-30 flex flex-col items-end gap-3 animate-fade-up sm:right-10 sm:top-24">
         <button
           onClick={() => setIsOverlayPanelOpen(p => !p)}
           className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors hud-text ${
@@ -403,15 +403,16 @@ const LiveFeed = () => {
         )}
       </div>
 
-      {/* Top HUD bar — back + REC + clock */}
-      <div className="pointer-events-none absolute inset-x-0 top-10 z-10 mx-auto flex max-w-[1440px] items-center justify-between px-10">
-        <div className="flex items-center gap-4">
+      {/* Top HUD bar — back + switcher | status | clock */}
+      <div className="pointer-events-none absolute inset-x-0 top-4 z-20 mx-auto flex max-w-[1440px] items-center justify-between px-4 sm:top-10 sm:px-10">
+        {/* Left: nav + switcher */}
+        <div className="flex shrink-0 items-center gap-2 sm:gap-4">
           <Link
             to="/"
-            className="pointer-events-auto inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground hud-text transition hover:text-accent"
+            className="pointer-events-auto inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.25em] text-foreground hud-text transition hover:text-accent sm:gap-2 sm:text-[10px] sm:tracking-[0.35em]"
           >
-            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
-            back
+            <ArrowLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" strokeWidth={1.5} />
+            <span className="hidden sm:inline">back</span>
           </Link>
 
           <SystemSwitcher
@@ -421,34 +422,35 @@ const LiveFeed = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground hud-text">
+        {/* Center: stream status */}
+        <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap font-mono text-[8px] uppercase tracking-[0.15em] text-foreground hud-text sm:gap-2 sm:text-[10px] sm:tracking-[0.35em]">
           {streamStatus === "live" ? (
             <>
-              <span className="relative flex h-2 w-2">
+              <span className="relative flex h-2 w-2 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-70" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
               </span>
-              live · {activeSystem?.name ?? "cam 01"}
-              {streamStats && (
-                <span className="ml-2 text-foreground/70">
-                  [{Math.round(streamStats.fps)}FPS · {Math.round(streamStats.latency)}MS]
-                </span>
-              )}
+              <span>live</span>
+              <span className="hidden text-foreground/70 xl:inline">
+                · {activeSystem?.name ?? "cam 01"}
+                {streamStats && ` [${Math.round(streamStats.fps)}FPS · ${Math.round(streamStats.latency)}MS]`}
+              </span>
             </>
           ) : streamStatus === "connecting" ? (
             <>
-              <span className="h-2 w-2 rounded-full bg-foreground/80 animate-pulse" />
-              connecting · {activeSystem?.name ?? "cam 01"}
+              <span className="h-2 w-2 shrink-0 rounded-full bg-foreground/80 animate-pulse" />
+              <span>connecting</span>
             </>
           ) : (
             <>
-              <span className="h-2 w-2 rounded-full bg-accent animate-pulse-glow" />
-              simulated · {activeSystem?.name ?? "cam 01"}
+              <span className="h-2 w-2 shrink-0 rounded-full bg-accent animate-pulse-glow" />
+              <span>sim</span>
             </>
           )}
         </div>
 
-        <div className="font-mono text-[10px] uppercase tabular-nums tracking-[0.3em] text-foreground hud-text">
+        {/* Right: clock */}
+        <div className="hidden shrink-0 font-mono text-[10px] uppercase tabular-nums tracking-[0.3em] text-foreground hud-text md:block">
           {time || "--:--:-- UTC"}
         </div>
       </div>
@@ -480,25 +482,25 @@ const LiveFeed = () => {
       </div>
 
       {/* Identity label — bottom left */}
-      <div className="pointer-events-none absolute bottom-10 left-10 z-10 animate-fade-up">
-        <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/95 hud-text">
+      <div className="pointer-events-none absolute bottom-4 left-4 z-10 animate-fade-up sm:bottom-10 sm:left-10">
+        <div className="font-mono text-[9px] uppercase tracking-[0.25em] text-foreground/95 hud-text sm:text-[10px] sm:tracking-[0.35em]">
           {activeSystem ? `${activeSystem.name} · ${activeSystem.location}` : "chamber 01 · sector a"}
         </div>
       </div>
 
-      {/* Telemetry overlay — containerless, bottom right, AR-inspired */}
-      <div className="pointer-events-none absolute bottom-10 right-10 z-10 flex items-end gap-10 animate-fade-up delay-200">
+      {/* Telemetry overlay — bottom right */}
+      <div className="pointer-events-none absolute bottom-4 right-4 z-10 flex items-end gap-4 animate-fade-up delay-200 sm:bottom-10 sm:right-10 sm:gap-10">
         {dynamicMetrics.map((m) => (
           <div key={m.label} className="text-right">
-            <div className="flex items-center justify-end gap-2 font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/90 hud-text">
+            <div className="flex items-center justify-end gap-1.5 font-mono text-[9px] uppercase tracking-[0.25em] text-foreground/90 hud-text sm:gap-2 sm:text-[10px] sm:tracking-[0.35em]">
               <span className="h-1 w-1 rounded-full bg-accent animate-pulse-glow" />
               {m.label}
             </div>
-            <div className="mt-1.5 flex items-baseline justify-end gap-1.5">
-              <span className="font-display text-[34px] font-light tabular-nums leading-none text-foreground hud-text-strong transition-all duration-500 md:text-[44px]">
+            <div className="mt-1 flex items-baseline justify-end gap-1 sm:mt-1.5 sm:gap-1.5">
+              <span className="font-display text-[24px] font-light tabular-nums leading-none text-foreground hud-text-strong transition-all duration-500 sm:text-[34px] md:text-[44px]">
                 {m.value}
               </span>
-              <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-foreground/80 hud-text">
+              <span className="font-mono text-[8px] uppercase tracking-[0.2em] text-foreground/80 hud-text sm:text-[10px] sm:tracking-[0.3em]">
                 {m.unit}
               </span>
             </div>
