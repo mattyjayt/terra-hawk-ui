@@ -431,9 +431,13 @@ const LiveFeed = () => {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
               </span>
               <span>live</span>
+              {streamStats && (
+                <span className="hidden text-foreground/70 sm:inline">
+                  [{Math.round(streamStats.fps)}FPS · {Math.round(streamStats.latency)}MS]
+                </span>
+              )}
               <span className="hidden text-foreground/70 xl:inline">
                 · {activeSystem?.name ?? "cam 01"}
-                {streamStats && ` [${Math.round(streamStats.fps)}FPS · ${Math.round(streamStats.latency)}MS]`}
               </span>
             </>
           ) : streamStatus === "connecting" ? (
