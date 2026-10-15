@@ -4,13 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SpeedInsights } from "@vercel/speed-insights/react";
-import Index from "./pages/Index.tsx";
-import LiveFeed from "./pages/LiveFeed.tsx";
-import About from "./pages/About.tsx";
-import NotFound from "./pages/NotFound.tsx";
-import Settings from "./pages/Settings.tsx";
-import Dashboard from "./pages/Dashboard.tsx";
-import AmbientBackground from "./components/AmbientBackground.tsx";
+import LabExperience from "./components/LabExperience";
 
 const queryClient = new QueryClient();
 
@@ -20,15 +14,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AmbientBackground />
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/live" element={<LiveFeed />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          <Route path="*" element={<LabExperience />} />
         </Routes>
       </BrowserRouter>
       <SpeedInsights />
